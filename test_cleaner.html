@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cleaner Test</title>
+</head>
+
+<body>
+  <h1>Cleaner Logic Test</h1>
+  <div id="dirty-input" style="display:none;">
+    <!-- Case 1: Full Table -->
+    <h3>Full Table</h3>
+    <table id="example" class="display dataTable" style="width:100%">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Position</th>
+          <th>Office</th>
+          <th>Age</th>
+          <th>Start date</th>
+          <th>Salary</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Zorita Serrano</td>
+          <td>Software Engineer</td>
+          <td>San Francisco</td>
+          <td>56</td>
+          <td>2012-06-01</td>
+          <td>$115,000</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr>
+
+    <!-- Case 2: Header Only -->
+    <h3>Header Only</h3>
+    <table style="border-collapse: collapse;">
+      <thead>
+        <tr>
+          <th style="background-color: #f2f2f2;">Item</th>
+          <th style="background-color: #f2f2f2;">Cost</th>
+        </tr>
+      </thead>
+    </table>
+
+    <hr>
+
+    <!-- Case 3: Partial Table (Just Rows) -->
+    <h3>Partial Table</h3>
+    <table>
+      <tbody>
+        <tr>
+          <td>Apple</td>
+          <td>$1.00</td>
+        </tr>
+        <tr>
+          <td>Banana</td>
+          <td>$0.50</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr>
+
+    <!-- Case 4: Plain Text equivalent (simulated by simple div) -->
+    <h3>Plain Text (Simulated)</h3>
+    <div id="plain-text-sim">
+      Just some plain text that shouldn't be touched too much, maybe just preserved.
+    </div>
+
+  </div>
+
+  <div id="clean-output"></div>
+
+  <script src="turndown.js"></script>
+  <script src="turndown-plugin-gfm.js"></script>
+
+  <script>
+    function runCleaner() {
+      const inputHtml = document.getElementById('dirty-input').innerHTML;
+      console.log("Input HTML:", inputHtml);
+
+      try {
+        let htmlText = inputHtml;
+
+        // --- NEW LOGIC START ---
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+        const tables = doc.querySelectorAll('table');
+
+        let modified = false;
+        tables.forEach(table => {
+          const firstRow = table.rows[0];
+          if (firstRow && !table.tHead) {
+            // Check if the first row is actually a header row (all th) despite missing thead
+            const isImplicitHeader = Array.from(firstRow.cells).every(cell => cell.tagName === 'TH');
+
+            if (!isImplicitHeader) {
+              // It's a data table without headers (e.g. partial copy)
+              // Create a dummy header row
+              const thead = doc.createElement('thead');
+              const tr = doc.createElement('tr');
+              // Matches column count of first row
+              for (let i = 0; i < firstRow.cells.length; i++) {
+                const th = doc.createElement('th');
+                th.textContent = ""; // Empty header
+                tr.appendChild(th);
+              }
+              thead.appendChild(tr);
+              table.insertBefore(thead, table.firstChild);
+              modified = true;
+            }
+          }
+        });
+
+        if (modified) {
+          htmlText = doc.body.innerHTML;
+        }
+        // --- NEW LOGIC END ---
+
+        // 1. Setup Converters
+        const turndownService = new TurndownService({
+          headingStyle: 'atx',
+          codeBlockStyle: 'fenced'
+        });
+        turndownService.use(turndownPluginGfm.gfm);
+
+        // 2. The "Wash" Cycle
+        const markdown = turndownService.turndown(htmlText);
+        console.log("Markdown Output:", markdown);
+
+        // Output as plain text (pre-wrap) to visualize markdown format
+        document.getElementById('clean-output').innerText = markdown;
+        document.getElementById('clean-output').style.whiteSpace = "pre-wrap";
+        document.getElementById('clean-output').style.fontFamily = "monospace";
+        return "SUCCESS";
+      } catch (e) {
+        console.error(e);
+        return "ERROR: " + e.message;
+      }
+    }
+
+    // Auto-run on load
+    window.onload = runCleaner;
+  </script>
+</body>
+
+</html>

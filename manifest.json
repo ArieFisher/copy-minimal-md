@@ -1,0 +1,23 @@
+{
+    "manifest_version": 3,
+    "name": "Docs Markdown Cleaner",
+    "version": "0.1.8",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "clipboardRead",
+        "clipboardWrite"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "commands": {
+        "run-markdown-clean": {
+            "suggested_key": {
+                "default": "Ctrl+Shift+U",
+                "mac": "Command+Shift+U"
+            },
+            "description": "Clean Docs selection via Markdown"
+        }
+    }
+}
