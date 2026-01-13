@@ -19,9 +19,9 @@
             return;
         }
 
-        // 3. Read clipboard
+        // 3. Read clipboard with Retry Logic (Bulletproof #1)
         try {
-            const items = await navigator.clipboard.read();
+            const items = await readClipboardWithRetry(3);
             let htmlBlob = null;
             let textBlob = null;
             let cleanText = "";
@@ -56,6 +56,14 @@
             if (htmlBlob) {
                 // HTML Priority
                 let htmlText = await htmlBlob.text();
+
+                // Safety: Size Limit (Bulletproof #2)
+                if (htmlText.length > 1000000) {
+                    console.warn("Docs Cleaner: Content too large (" + htmlText.length + " chars).");
+                    flashError("Content too large (>1MB). Please copy a smaller section.");
+                    return;
+                }
+
                 console.log("Docs Cleaner: HTML content found. Length:", htmlText.length);
 
                 // Pre-process: Inject dummy headers for headless tables to ensure Turndown GFM works
@@ -166,5 +174,23 @@
             overlay.style.opacity = '0';
             setTimeout(() => overlay.remove(), 500);
         }, 3000);
+    }
+
+    // --- Helpers ---
+
+    function sleep(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    }
+
+    async function readClipboardWithRetry(maxAttempts) {
+        for (let i = 0; i < maxAttempts; i++) {
+            try {
+                return await navigator.clipboard.read();
+            } catch (e) {
+                console.warn(`Docs Cleaner: Clipboard Read Attempt ${i + 1} failed:`, e);
+                if (i === maxAttempts - 1) throw e; // Last attempt failed, propagate error
+                await sleep(100); // 100ms backoff
+            }
+        }
     }
 })();
