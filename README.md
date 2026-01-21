@@ -1,8 +1,12 @@
 # Docs Markdown Cleaner
 
-A Chrome extension designed to strip unwanted inline styling (fonts, colors, background highlights) from Google Docs selections and convert them into clean **Markdown**.
 
-It achieves this by performing a simple conversion: **HTML → Markdown**.
+**What:** Converts copied HTML to Markdown.
+
+**Why:** Useful for people who frequently use LLMs.
+
+1. **Pasting tables into chatbots:** Copying from Sheets and pasting into an LLM joins all text together. Since LLMs understand Markdown, this extension lets you copy from spreadsheets (or web tables) and paste in a format LLMs can parse.  
+2. **Pasting into Docs:** If your editor supports Markdown (e.g., Google Docs), this extension strips unwanted formatting, preserving structure (headers, tables, bullets) without the source's idiosyncratic styling.
 
 ## Features
 
@@ -48,3 +52,18 @@ Since this is a developer tool, you will install it as an "Unpacked Extension".
 3. Toggle **Developer mode** in the top right corner.
 4. Click **Load unpacked**.
 5. Select the folder containing this project (where `manifest.json` is located).
+
+## Troubleshooting
+
+### "Copy Failed: Clipboard content mismatch"
+
+This error prevents the extension from processing stale clipboard data.
+
+**Why it happens:**
+- **Copy Blocked:** The browser may block background copy operations for security.
+- **Safety Check:** The extension detected that your clipboard content does not match your current selection.
+
+**Solution:**
+1. Click anywhere in the document to ensure it has focus.
+2. Retry the shortcut.
+3. If it persists, manually Copy (`Cmd+C` / `Ctrl+C`) your selection first, then run the extension shortcut.
