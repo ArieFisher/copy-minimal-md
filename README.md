@@ -1,12 +1,13 @@
-# Docs Markdown Cleaner
+# Copy as Minimally-Formatted Markdown
 
-
-**What:** Converts copied HTML to Markdown.
+**What:** Converts copied HTML (in the clipboard) to Markdown, keeping the structure (headings, tables..) but stripping the source formatting.
 
 **Why:** Useful for people who frequently use LLMs.
 
 1. **Pasting tables into chatbots:** Copying from Sheets and pasting into an LLM joins all text together. Since LLMs understand Markdown, this extension lets you copy from spreadsheets (or web tables) and paste in a format LLMs can parse.  
 2. **Pasting into Docs:** If your editor supports Markdown (e.g., Google Docs), this extension strips unwanted formatting, preserving structure (headers, tables, bullets) without the source's idiosyncratic styling.
+
+**Why not use an existing Chrome extension or open-source project (like [Markdownload](https://github.com/deathau/markdownload)):**  You probably should. I built this to avoid Chrome extension security concerns and to learn firsthand how agentic development is changing tooling and product management.
 
 ## Features
 
