@@ -1,70 +1,87 @@
+* * *
+
 # Copy as Minimally-Formatted Markdown
 
-**What:** Converts copied HTML (in the clipboard) to Markdown, keeping the structure (headings, tables..) but stripping the source formatting.
+Converts copied web content to Markdown—preserving structure (tables, headers, lists) while stripping source formatting.
 
-**Why:** Useful for people who frequently use LLMs.
+## The Problem
 
-1. **Pasting tables into chatbots:** Copying from Sheets and pasting into an LLM joins all text together. Since LLMs understand Markdown, this extension lets you copy from spreadsheets (or web tables) and paste in a format LLMs can parse.  
-2. **Pasting into Docs:** If your editor supports Markdown (e.g., Google Docs), this extension strips unwanted formatting, preserving structure (headers, tables, bullets) without the source's idiosyncratic styling.
+**1\. Copy-paste often breaks.** Copy a table from a spreadsheet and paste it into an LLM, and you get the text but no structure (not even spaces between cell contents).  LLMs cannot work with this.
 
-**Why not use an existing Chrome extension or open-source project (like [Markdownload](https://github.com/deathau/markdownload)):**  You probably should. I built this to avoid Chrome extension security concerns and to learn firsthand how agentic development is changing tooling and product management.
+```
+SourceRevenueImpressionsShopify15127214031139...
+```
+
+**2\. Copy-paste also over-preserves.** Pasting from the web into Google Docs brings unwanted formatting. "Paste as plain text" strips it, but loses all structure.
+
+## The Solution
+
+A second keyboard shortcut that copies text and structure, without formatting. Ideal for pasting into LLMs or Markdown-aware editors like Google Docs.
+
+**Why this tool?**
+
+**Security:** Published Chrome extensions require trusting third-party code with clipboard access. This installs as an unpacked extension—you can inspect every line before running it.
+
+**Unique use case:** Most alternatives (like [Markdownload](https://github.com/deathau/markdownload)) are _web clippers_—they extract full pages and save them as files. This tool is a _clipboard utility_: select text, hit a shortcut, paste clean Markdown. No popups, no file management, no context switching.
+
+**When to use something else:** If you want full-page archiving, Obsidian integration, frontmatter templates, or rich configuration options, use Markdownload or [yorkxin/copy-as-markdown](https://github.com/yorkxin/copy-as-markdown). They're mature, well-maintained, and do more.
 
 ## Features
 
-- **Removes Inline Styles**: Strips font families, colors, and background highlights that often clutter copied text.
-- **Preserves Structure**: Keeps H1-H6, bold, italics, links, and lists intact.
-- **Table Support**: Preserves table structures.
-- **Privacy Focused**: All processing happens locally in your browser. No data is sent to the cloud.
-- **Clipboard Integration**: Automatically updates your clipboard with the CLEAN Markdown, ready to paste.
+*   **Strips inline styles**: Removes font families, colors, and background highlights
+*   **Preserves structure**: Headings, bold, italics, links, lists, and tables
+*   **Local processing**: No data sent to the cloud
+*   **Clipboard integration**: Automatically updates your clipboard with clean Markdown
 
 ## Usage
 
-1. **Select** the text you want to clean in Google Docs (or any web page).
-2. Press the keyboard shortcut:
-   - **Mac**: `Command + Shift + U`
-   - **Windows/Linux**: `Ctrl + Shift + U`
-3. You will see a brief flash or console log confirming the clean.
-4. **Paste** (`Cmd+V` / `Ctrl+V`) the text back into your document. It will now be free of direct formatting.
+1.  **Select** text on any web page
+2.  Press the keyboard shortcut:
+    *   **Mac**: `Cmd + Shift + U`
+    *   **Windows/Linux**: `Ctrl + Shift + U`
+3.  **Paste** (`Cmd+V` / `Ctrl+V`)—now clean Markdown
 
 ## How It Works
 
-1. **Trigger**: The background script listens for the command (`run-markdown-clean`).
-2. **Copy**: It programmatically triggers a copy to get the browser's rich HTML version of your selection.
-3. **Turndown**: The HTML is converted into **Markdown** using [Turndown](https://github.com/mixmark-io/turndown). This step naturally discards style attributes like `font-family` or `background-color`.
-4. **Clipboard Write**: The new, clean Markdown is written back to your clipboard.
+1.  Background script listens for the command (`run-markdown-clean`)
+2.  Programmatically triggers copy to get the browser's rich HTML
+3.  Converts HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown), discarding style attributes
+4.  Writes clean Markdown back to clipboard
 
 ## Dependencies
 
-- [Turndown](https://github.com/mixmark-io/turndown) - HTML to Markdown converter.
-- [Turndown Plugin GFM](https://github.com/mixmark-io/turndown-plugin-gfm) - For Tables & Strikethrough support.
+*   [Turndown](https://github.com/mixmark-io/turndown) — HTML to Markdown converter
+*   [Turndown Plugin GFM](https://github.com/mixmark-io/turndown-plugin-gfm) — Tables and strikethrough support
 
 ## Permissions
 
-- `activeTab`: To execute the cleaning script on the current page.
-- `scripting`: To inject the library files dynamically.
-- `clipboardRead` / `clipboardWrite`: To modify your clipboard content.
+*   `activeTab`: Execute script on current page
+*   `scripting`: Inject library files
+*   `clipboardRead` / `clipboardWrite`: Modify clipboard content
 
 ## Installation
 
-Since this is a developer tool, you will install it as an "Unpacked Extension".
+Install as an unpacked extension:
 
-1. Clone or download this repository to your local machine.
-2. Open Chrome and navigate to `chrome://extensions`.
-3. Toggle **Developer mode** in the top right corner.
-4. Click **Load unpacked**.
-5. Select the folder containing this project (where `manifest.json` is located).
+1.  Clone or download this repository
+2.  Open Chrome → `chrome://extensions`
+3.  Enable **Developer mode** (top right)
+4.  Click **Load unpacked**
+5.  Select the project folder (containing `manifest.json`)
 
 ## Troubleshooting
 
 ### "Copy Failed: Clipboard content mismatch"
 
-This error prevents the extension from processing stale clipboard data.
+Prevents processing stale clipboard data.
 
-**Why it happens:**
-- **Copy Blocked:** The browser may block background copy operations for security.
-- **Safety Check:** The extension detected that your clipboard content does not match your current selection.
+**Causes:**
 
-**Solution:**
-1. Click anywhere in the document to ensure it has focus.
-2. Retry the shortcut.
-3. If it persists, manually Copy (`Cmd+C` / `Ctrl+C`) your selection first, then run the extension shortcut.
+*   Browser blocked background copy (security restriction)
+*   Clipboard doesn't match current selection
+
+**Fix:**
+
+1.  Click in the document to ensure focus
+2.  Retry the shortcut
+3.  If it persists, manually copy (`Cmd+C` / `Ctrl+C`) first, then run the shortcut
