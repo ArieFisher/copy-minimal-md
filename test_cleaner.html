@@ -102,17 +102,19 @@
 
             if (!isImplicitHeader) {
               // It's a data table without headers (e.g. partial copy)
-              // Create a dummy header row
+              // Promote the first row as the header instead of creating empty headers
               const thead = doc.createElement('thead');
               const tr = doc.createElement('tr');
-              // Matches column count of first row
+              // Copy content from first row to header
               for (let i = 0; i < firstRow.cells.length; i++) {
                 const th = doc.createElement('th');
-                th.textContent = ""; // Empty header
+                th.textContent = firstRow.cells[i]?.textContent || "";
                 tr.appendChild(th);
               }
               thead.appendChild(tr);
               table.insertBefore(thead, table.firstChild);
+              // Remove the original first row from tbody to avoid duplication
+              firstRow.remove();
               modified = true;
             }
           }
