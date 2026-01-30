@@ -139,7 +139,15 @@
 
         } catch (readError) {
             console.error("Docs Cleaner: Clipboard Read Failed:", readError);
-            promptManualCopy("Could not access clipboard. Please focus the document, manually Copy (Cmd+C), and try again.");
+
+            // Provide more specific error messages based on error type
+            if (readError.name === 'NotAllowedError') {
+                flashError("Clipboard access denied. Please reload the extension and try again.");
+            } else if (readError.name === 'NotFoundError') {
+                flashError("Clipboard empty. Please select text first.");
+            } else {
+                flashError("Clipboard read failed. Try reloading the page.");
+            }
         }
 
     } catch (err) {
@@ -189,9 +197,9 @@
             try {
                 return await navigator.clipboard.read();
             } catch (e) {
-                console.warn(`Docs Cleaner: Clipboard Read Attempt ${i + 1} failed:`, e);
+                console.warn(`Docs Cleaner: Clipboard Read Attempt ${i + 1} failed:`, e.name, e.message);
                 if (i === maxAttempts - 1) throw e; // Last attempt failed, propagate error
-                await sleep(100); // 100ms backoff
+                await sleep(150); // 150ms backoff
             }
         }
     }
