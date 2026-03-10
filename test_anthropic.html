@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+</head>
+
+<body>
+    <div id="anthropic-content">
+        <div class="PublicationList-module-scss-module__KxYrHG__listHeader"
+            style="box-sizing: inherit; display: grid; gap: 24px; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid rgb(209, 207, 197); grid-template-columns: repeat(9, 1fr);">
+            <span class="PublicationList-module-scss-module__KxYrHG__headerDate caption"
+                style="grid-column: span 2;">Date</span>
+            <span class="PublicationList-module-scss-module__KxYrHG__headerCategory caption"
+                style="grid-column: span 2;">Category</span>
+            <span class="PublicationList-module-scss-module__KxYrHG__headerTitle caption"
+                style="grid-column: span 5;">Title</span>
+        </div>
+        <ul class="PublicationList-module-scss-module__KxYrHG__list"
+            style="box-sizing: inherit; padding: 0px; gap: 16px 24px; flex-direction: column; margin: 0px; list-style: none; display: grid; grid-template-columns: repeat(9, 1fr);">
+            <li
+                style="box-sizing: inherit; grid-column: 1 / -1; grid-template-columns: subgrid; display: grid; border-top: none; padding-top: 0px;">
+                <a href="#" class="PublicationList-module-scss-module__KxYrHG__listItem"
+                    style="display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;">
+                    <div class="PublicationList-module-scss-module__KxYrHG__meta" style="display: contents;">
+                        <time class="PublicationList-module-scss-module__KxYrHG__date body-3"
+                            style="grid-column: span 2;">Jan 15, 2026</time>
+                        <span class="PublicationList-module-scss-module__KxYrHG__subject body-3"
+                            style="grid-column: span 2;">Economic Research</span>
+                    </div>
+                    <span class="PublicationList-module-scss-module__KxYrHG__title body-3"
+                        style="grid-column: span 5;">Anthropic Economic Index: New building blocks for understanding AI
+                        use</span>
+                </a>
+            </li>
+            <li style="box-sizing: inherit; grid-column: 1 / -1; grid-template-columns: subgrid; display: grid;">
+                <a href="#" class="PublicationList-module-scss-module__KxYrHG__listItem"
+                    style="display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;">
+                    <div class="PublicationList-module-scss-module__KxYrHG__meta" style="display: contents;">
+                        <time class="PublicationList-module-scss-module__KxYrHG__date body-3"
+                            style="grid-column: span 2;">Jan 15, 2026</time>
+                        <span class="PublicationList-module-scss-module__KxYrHG__subject body-3"
+                            style="grid-column: span 2;">Economic Research</span>
+                    </div>
+                    <span class="PublicationList-module-scss-module__KxYrHG__title body-3"
+                        style="grid-column: span 5;">Anthropic Economic Index report: economic primitives</span>
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <script>
+        // Programmatically select the content to simulate a user highlighting it
+        const contentDiv = document.getElementById('anthropic-content');
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(contentDiv);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        // Output what getSelection().toString() actually returns!
+        const selectedText = selection.toString().trim();
+        console.log("--- RAW SELECTED TEXT ---");
+        console.log(JSON.stringify(selectedText));
+
+        // The text/plain output that the user provided
+        const cleanText = "Date\nCategory\nTitle\nJan 15, 2026\nEconomic Research\nAnthropic Economic Index: New building blocks for understanding AI use\nJan 15, 2026\nEconomic Research\nAnthropic Economic Index report: economic primitives";
+
+        const checkChunk = selectedText.substring(0, 50).replace(/\s+/g, ' ');
+        const clipboardChunk = cleanText.substring(0, 100).replace(/\s+/g, ' ');
+
+        console.log("--- CHUNKS ---");
+        console.log("checkChunk:     ", JSON.stringify(checkChunk));
+        console.log("clipboardChunk: ", JSON.stringify(clipboardChunk));
+        console.log("Includes?       ", clipboardChunk.includes(checkChunk));
+    </script>
+</body>
+
+</html>
