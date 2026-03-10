@@ -72,6 +72,16 @@
                 const tables = doc.querySelectorAll('table');
 
                 let modified = false;
+
+                // Fix Google Sheets extra newlines by converting block-level divs to inline spans inside tables
+                const cells = doc.querySelectorAll('td div, th div');
+                Array.from(cells).forEach(div => {
+                    const span = doc.createElement('span');
+                    span.append(...div.childNodes);
+                    div.replaceWith(span);
+                    modified = true;
+                });
+
                 tables.forEach(table => {
                     const firstRow = table.rows[0];
                     if (firstRow && !table.tHead) {
