@@ -47,6 +47,7 @@ A second keyboard shortcut that copies text and structure, without formatting. I
 2.  Programmatically triggers copy to get the browser's rich HTML
 3.  Converts HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown), discarding style attributes
 4.  Writes clean Markdown back to clipboard
+5.  **Plain Text Fallback**: If no HTML is present, it re-writes plain text to scrub hidden metadata (e.g., RTF or vendor tags).
 
 ## Dependencies
 
