@@ -142,7 +142,7 @@
                 console.log("Docs Cleaner: No HTML found, using Plain Text.");
                 const plainText = await textBlob.text();
 
-                // For plain text, we essentially just treat it as valid markdown (or convert if we wanted to escape things, but usually passthrough is best for "cleaner" intent on plain text)
+                // Scrubs hidden metadata (RTF, vendor tags) by rewriting as clean text
                 await navigator.clipboard.writeText(plainText);
 
                 console.log("Docs Cleaner: Plain text written to clipboard.");

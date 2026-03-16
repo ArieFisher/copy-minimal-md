@@ -124,6 +124,8 @@ function cell (content, node) {
   var index = indexOf.call(node.parentNode.childNodes, node);
   var prefix = ' ';
   if (index === 0) prefix = '| ';
+  // Collapse newlines to <br> to keep table rows on a single line
+  content = content.replace(/\s*\n\s*/g, '<br>');
   return prefix + content + ' |'
 }
 
