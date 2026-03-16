@@ -40,12 +40,21 @@
             // If the clipboard text doesn't contain a significant chunk of our selection, 
             // the copy probably failed silently.
             if (selectedText && cleanText) {
-                // Use a substring check to avoid issues with formatting/whitespace diffs
-                const checkChunk = selectedText.substring(0, 50).replace(/\s+/g, ' ');
-                const clipboardChunk = cleanText.substring(0, 100).replace(/\s+/g, ' '); // Search in first 100 chars
+                // Use a word-intersection check to avoid issues with formatting/whitespace diffs from grid/flexbox layouts
+                const checkWords = selectedText.substring(0, 50).split(/\s+/).filter(w => w.length > 0);
+                const clipboardWords = cleanText.substring(0, 100).split(/\s+/).filter(w => w.length > 0);
 
-                if (!clipboardChunk.includes(checkChunk)) {
-                    console.warn("Docs Cleaner: Stale clipboard detected.");
+                let matchCount = 0;
+                const targetMatches = Math.min(3, checkWords.length);
+
+                for (const word of checkWords) {
+                    if (clipboardWords.includes(word)) {
+                        matchCount++;
+                    }
+                }
+
+                if (matchCount < targetMatches && checkWords.length > 0) {
+                    console.warn(`Docs Cleaner: Stale clipboard detected. Matched ${matchCount}/${targetMatches} words.`);
                     flashError("Copy Failed: Clipboard content mismatch. Click document & retry.");
                     return;
                 }
@@ -72,6 +81,16 @@
                 const tables = doc.querySelectorAll('table');
 
                 let modified = false;
+
+                // Fix Google Sheets extra newlines by converting block-level divs to inline spans inside tables
+                const cells = doc.querySelectorAll('td div, th div');
+                Array.from(cells).forEach(div => {
+                    const span = doc.createElement('span');
+                    span.append(...div.childNodes);
+                    div.replaceWith(span);
+                    modified = true;
+                });
+
                 tables.forEach(table => {
                     const firstRow = table.rows[0];
                     if (firstRow && !table.tHead) {
