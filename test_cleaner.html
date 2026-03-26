@@ -125,6 +125,7 @@
 
   <div id="clean-output"></div>
 
+  <script src="purify.min.js"></script>
   <script src="turndown.js"></script>
   <script src="turndown-plugin-gfm.js"></script>
 
@@ -183,15 +184,28 @@
         }
         // --- NEW LOGIC END ---
 
-        // 1. Setup Converters
+        // 1. Sanitize HTML and Strip Data Tags
+        const cleanHtml = DOMPurify.sanitize(htmlText, {
+            ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'u', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'br', 'hr', 'blockquote', 'code', 'pre'],
+            ALLOWED_ATTR: ['href', 'src', 'alt', 'title'],
+            ALLOW_DATA_ATTR: false
+        });
+
+        // 2. Setup Converters
         const turndownService = new TurndownService({
           headingStyle: 'atx',
           codeBlockStyle: 'fenced'
         });
         turndownService.use(turndownPluginGfm.gfm);
 
-        // 2. The "Wash" Cycle
-        const markdown = turndownService.turndown(htmlText);
+        // 3. The "Wash" Cycle
+        let markdown = turndownService.turndown(cleanHtml);
+        
+        // Post-process to fix excess whitespace within markdown links
+        markdown = markdown.replace(/\[([\s\S]+?)\]\((.*?)\)/g, (match, innerText, href) => {
+            return `[${innerText.trim().replace(/\s+/g, ' ')}](${href})`;
+        });
+
         console.log("Markdown Output:", markdown);
 
         // Output as plain text (pre-wrap) to visualize markdown format

@@ -122,6 +122,12 @@
                 }
 
                 // 3. Setup Converters
+                const cleanHtml = DOMPurify.sanitize(htmlText, {
+                    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'u', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'br', 'hr', 'blockquote', 'code', 'pre'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title'],
+                    ALLOW_DATA_ATTR: false
+                });
+
                 const turndownService = new TurndownService({
                     headingStyle: 'atx',
                     codeBlockStyle: 'fenced'
@@ -129,7 +135,12 @@
                 turndownService.use(turndownPluginGfm.gfm);
 
                 // 4. Convert to Markdown
-                const markdown = turndownService.turndown(htmlText);
+                let markdown = turndownService.turndown(cleanHtml);
+
+                // Post-process to fix excess whitespace within markdown links
+                markdown = markdown.replace(/\[([\s\S]+?)\]\((.*?)\)/g, (match, innerText, href) => {
+                    return `[${innerText.trim().replace(/\s+/g, ' ')}](${href})`;
+                });
 
                 // 5. Write back to clipboard
                 await navigator.clipboard.writeText(markdown);
