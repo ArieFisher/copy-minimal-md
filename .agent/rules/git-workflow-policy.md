@@ -14,7 +14,7 @@ trigger: always_on
    git fetch --prune
    ```
 
-4. Before starting a new feature branch, delete any local branches that no longer exist on remote:
+4. Before creating a new feature branch, delete any local branches that no longer exist on remote:
    ```bash
 git fetch --prune
 git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -d
