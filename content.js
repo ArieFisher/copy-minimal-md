@@ -7,8 +7,15 @@
         const selectedText = selection ? selection.toString().trim() : "";
 
         // 2. Attempt programmatic copy
-        // Google Docs often blocks this initiated by background script
-        const success = document.execCommand('copy');
+        // Note: document.execCommand('copy') is broadly considered deprecated, but it is strictly REQUIRED here.
+        // It tells the browser to simulate a 'Cmd+C' keystroke, guaranteeing we get the exact same
+        // clipboard HTML payload that a native copy would generate. This forces complex apps like
+        // Google Docs, Notion, or Confluence to fire their custom copy event listeners and format 
+        // their specific internal data structures into standard clipboard HTML, which we then read and process.
+        // (Also note: Google Docs sometimes blocks this when initiated by a background script)
+        
+        const success = document.execCommand('copy'); 
+        
         console.log("Docs Cleaner: execCommand('copy') result:", success);
 
         // Wait for clipboard I/O to settle (race condition fix)

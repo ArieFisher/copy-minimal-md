@@ -82,7 +82,8 @@ Instead:
 ## How It Works
 
 1.  Background script listens for the command (`run-markdown-clean`)
-2.  Programmatically triggers 'copy' to get the browser's selection.
+2.  Programmatically triggers 'copy' (`document.execCommand('copy')`) to simulate a native user copy (`Cmd+C`). 
+    *   *Why use a deprecated API?* Modern APIs (`navigator.clipboard.writeText`) require explicit string data and bypass the browser's native copy logic. Using `execCommand` forces the browser—and complex host apps like Google Docs, Notion, or code editors—to fire their custom event listeners. This is the only reliable way to guarantee they serialize their complex internal state into the rich HTML format, allowing the script to grab the exact same clipboard data a real user would get.
 3.  Converts HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown), discarding style attributes
 4.  Writes clean Markdown back to clipboard
 5.  **Plain Text Fallback**: If no HTML is present, it re-writes plain text to scrub hidden metadata (e.g., RTF or vendor tags).
