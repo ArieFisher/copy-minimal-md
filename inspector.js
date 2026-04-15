@@ -9,16 +9,21 @@ function formatBytes(bytes) {
 
 /**
  * Pretty-print HTML using js-beautify for the raw data pane.
+ * Tag names are uppercased for easier visual scanning; attributes are left as-is.
  */
 function prettyPrintHtml(html) {
     if (typeof html_beautify === 'function') {
-        return html_beautify(html, {
+        html = html_beautify(html, {
             indent_size: 2,
             wrap_line_length: 0,
             preserve_newlines: false,
             indent_inner_html: true
         });
     }
+    // Uppercase tag names only (not attributes)
+    html = html.replace(/<(\/?)([a-z][a-z0-9]*)/gi, (match, slash, tag) => {
+        return '<' + slash + tag.toUpperCase();
+    });
     return html;
 }
 
