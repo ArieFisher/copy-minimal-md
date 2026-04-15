@@ -7,6 +7,21 @@ function formatBytes(bytes) {
     return `${size} ${sizes[i]}`;
 }
 
+/**
+ * Lightweight HTML pretty-printer for the raw data pane.
+ * Inserts newlines before block-level tags so the markup is scannable.
+ */
+function prettyPrintHtml(html) {
+    const blockTags = 'address|article|aside|blockquote|body|br|caption|col|colgroup|dd|details|dialog|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|head|header|hr|html|legend|li|link|main|meta|nav|ol|p|pre|section|summary|table|tbody|td|tfoot|th|thead|title|tr|ul';
+    // Add newline before opening block tags (unless already preceded by one)
+    html = html.replace(new RegExp(`(?<!\n)(<(?:${blockTags})(?:\\s|>|/>))`, 'gi'), '\n$1');
+    // Add newline before closing block tags (unless already preceded by one)
+    html = html.replace(new RegExp(`(?<!\n)(</(?:${blockTags})\\s*>)`, 'gi'), '\n$1');
+    // Remove leading blank line if present
+    html = html.replace(/^\n/, '');
+    return html;
+}
+
 async function simulateCopyMinimalMd(clipboardItems) {
     let htmlBlob = null;
     let textBlob = null;
@@ -349,7 +364,7 @@ async function simulateCopyMinimalMd(clipboardItems) {
         simpleDataContent.className = 'data-content';
         let displayCleanHtml = cleanHtml || '[Empty String]';
         displayCleanHtml = displayCleanHtml.replace(/(data:image\/[^;]+;base64,)[a-zA-Z0-9+/=]+/g, '$1[IMAGE_BINARY]');
-        simpleDataContent.textContent = displayCleanHtml;
+        simpleDataContent.textContent = prettyPrintHtml(displayCleanHtml);
         simpleRawScroll.appendChild(simpleDataContent);
         const simpleRenderedScroll = document.createElement('div');
         simpleRenderedScroll.className = 'scroll-container';
@@ -516,7 +531,7 @@ async function readClipboard() {
                         if (text) {
                             text = text.replace(/(data:image\/[^;]+;base64,)[a-zA-Z0-9+/=]+/g, '$1[IMAGE_BINARY]');
                         }
-                        dataContent.textContent = text || '[Empty String]';
+                        dataContent.textContent = prettyPrintHtml(text) || '[Empty String]';
 
                         // Render HTML using Shadow DOM for isolation
                         const shadowHost = document.createElement('div');
