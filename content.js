@@ -98,6 +98,15 @@
                     modified = true;
                 });
 
+                // Fix Google Docs wrapping entire copy in a fake bold tag
+                const fakeBolds = doc.querySelectorAll('b[style*="font-weight:normal"], b[style*="font-weight: normal"]');
+                Array.from(fakeBolds).forEach(b => {
+                    const span = doc.createElement('span');
+                    span.append(...b.childNodes);
+                    b.replaceWith(span);
+                    modified = true;
+                });
+
                 tables.forEach(table => {
                     const firstRow = table.rows[0];
                     if (firstRow && !table.tHead) {

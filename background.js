@@ -12,4 +12,8 @@ chrome.commands.onCommand.addListener((command) => {
             }
         });
     }
+
+    if (command === "inspect-clipboard") {
+        chrome.tabs.create({ url: chrome.runtime.getURL("inspector.html") });
+    }
 });
