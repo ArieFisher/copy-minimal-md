@@ -8,17 +8,17 @@ function formatBytes(bytes) {
 }
 
 /**
- * Lightweight HTML pretty-printer for the raw data pane.
- * Inserts newlines before block-level tags so the markup is scannable.
+ * Pretty-print HTML using js-beautify for the raw data pane.
  */
 function prettyPrintHtml(html) {
-    const blockTags = 'address|article|aside|blockquote|body|br|caption|col|colgroup|dd|details|dialog|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|head|header|hr|html|legend|li|link|main|meta|nav|ol|p|pre|section|summary|table|tbody|td|tfoot|th|thead|title|tr|ul';
-    // Add newline before opening block tags (unless already preceded by one)
-    html = html.replace(new RegExp(`(?<!\n)(<(?:${blockTags})(?:\\s|>|/>))`, 'gi'), '\n$1');
-    // Add newline before closing block tags (unless already preceded by one)
-    html = html.replace(new RegExp(`(?<!\n)(</(?:${blockTags})\\s*>)`, 'gi'), '\n$1');
-    // Remove leading blank line if present
-    html = html.replace(/^\n/, '');
+    if (typeof html_beautify === 'function') {
+        return html_beautify(html, {
+            indent_size: 2,
+            wrap_line_length: 0,
+            preserve_newlines: false,
+            indent_inner_html: true
+        });
+    }
     return html;
 }
 
