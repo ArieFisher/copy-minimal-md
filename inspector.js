@@ -7,6 +7,21 @@ function formatBytes(bytes) {
     return `${size} ${sizes[i]}`;
 }
 
+/**
+ * Pretty-print HTML using js-beautify for the raw data pane.
+ */
+function prettyPrintHtml(html) {
+    if (typeof html_beautify === 'function') {
+        return html_beautify(html, {
+            indent_size: 2,
+            wrap_line_length: 0,
+            preserve_newlines: false,
+            indent_inner_html: true
+        });
+    }
+    return html;
+}
+
 async function simulateCopyMinimalMd(clipboardItems) {
     let htmlBlob = null;
     let textBlob = null;
@@ -349,7 +364,7 @@ async function simulateCopyMinimalMd(clipboardItems) {
         simpleDataContent.className = 'data-content';
         let displayCleanHtml = cleanHtml || '[Empty String]';
         displayCleanHtml = displayCleanHtml.replace(/(data:image\/[^;]+;base64,)[a-zA-Z0-9+/=]+/g, '$1[IMAGE_BINARY]');
-        simpleDataContent.textContent = displayCleanHtml;
+        simpleDataContent.textContent = prettyPrintHtml(displayCleanHtml);
         simpleRawScroll.appendChild(simpleDataContent);
         const simpleRenderedScroll = document.createElement('div');
         simpleRenderedScroll.className = 'scroll-container';
@@ -516,7 +531,7 @@ async function readClipboard() {
                         if (text) {
                             text = text.replace(/(data:image\/[^;]+;base64,)[a-zA-Z0-9+/=]+/g, '$1[IMAGE_BINARY]');
                         }
-                        dataContent.textContent = text || '[Empty String]';
+                        dataContent.textContent = prettyPrintHtml(text) || '[Empty String]';
 
                         // Render HTML using Shadow DOM for isolation
                         const shadowHost = document.createElement('div');
