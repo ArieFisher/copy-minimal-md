@@ -96,6 +96,78 @@ async function simulateCopyMinimalMd(clipboardItems) {
             }
         });
 
+        // Reconstruct ARIA flex/grid tables into standard HTML tables (e.g., Databricks, Notion)
+        const ariaRows = doc.querySelectorAll('[role="row"]');
+        if (ariaRows.length > 0 && doc.querySelectorAll('table').length === 0) {
+            const newTable = doc.createElement('table');
+            const tbody = doc.createElement('tbody');
+            let thead = null;
+            
+            ariaRows.forEach(ariaRow => {
+                const tr = doc.createElement('tr');
+                const ariaCells = ariaRow.querySelectorAll('[role="cell"], [role="columnheader"], [role="gridcell"]');
+                
+                let isHeaderRow = false;
+                
+                if (ariaCells.length > 0) {
+                    ariaCells.forEach(ariaCell => {
+                        const isHeader = ariaCell.getAttribute('role') === 'columnheader';
+                        if (isHeader) isHeaderRow = true;
+                        
+                        const cell = doc.createElement(isHeader ? 'th' : 'td');
+                        cell.innerHTML = ariaCell.innerHTML;
+                        tr.appendChild(cell);
+                    });
+                } else {
+                    // Fallback for generic div children
+                    const children = Array.from(ariaRow.children);
+                    children.forEach((child) => {
+                        const cell = doc.createElement('td');
+                        cell.innerHTML = child.innerHTML;
+                        tr.appendChild(cell);
+                    });
+                }
+                
+                if (isHeaderRow) {
+                    if (!thead) thead = doc.createElement('thead');
+                    thead.appendChild(tr);
+                } else {
+                    tbody.appendChild(tr);
+                }
+            });
+            
+            if (thead) {
+                newTable.appendChild(thead);
+            } else if (tbody.firstChild) {
+                // Turndown GFM requires a thead to render a Markdown table.
+                // If we didn't find specific columnheader roles, promote the first row.
+                thead = doc.createElement('thead');
+                const firstRow = tbody.firstChild;
+                const tr = doc.createElement('tr');
+                Array.from(firstRow.children).forEach(cell => {
+                    const th = doc.createElement('th');
+                    th.innerHTML = cell.innerHTML;
+                    tr.appendChild(th);
+                });
+                thead.appendChild(tr);
+                newTable.appendChild(thead);
+                firstRow.remove();
+            }
+            newTable.appendChild(tbody);
+            
+            const firstRowParent = ariaRows[0].parentElement;
+            if (firstRowParent) {
+                 firstRowParent.insertBefore(newTable, ariaRows[0]);
+            } else {
+                 doc.body.prepend(newTable);
+            }
+            
+            // Clean up original ARIA structure to prevent duplicates
+            ariaRows.forEach(row => row.remove());
+            modified = true;
+            sourceType = "HTML (Extracted ARIA Table)";
+        }
+
         if (modified) {
             htmlText = doc.body.innerHTML;
         }

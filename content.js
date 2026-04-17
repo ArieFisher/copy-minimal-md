@@ -61,6 +61,8 @@
                 }
 
                 if (matchCount < targetMatches && checkWords.length > 0) {
+                    console.log("Docs Cleaner: Selected words:", checkWords);
+                    console.log("Docs Cleaner: Clipboard words:", clipboardWords);
                     console.warn(`Docs Cleaner: Stale clipboard detected. Matched ${matchCount}/${targetMatches} words.`);
                     flashError("Copy Failed: Clipboard content mismatch. Click document & retry.");
                     return;
