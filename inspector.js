@@ -46,6 +46,10 @@ async function simulateCopyMinimalMd(clipboardItems) {
     let sourceType = "";
     let htmlText = "";
 
+    if (textBlob) {
+        originalPlainText = await textBlob.text();
+    }
+
     if (htmlBlob) {
         sourceType = "HTML";
         htmlText = await htmlBlob.text();
@@ -125,10 +129,29 @@ async function simulateCopyMinimalMd(clipboardItems) {
             return `[${innerText.trim().replace(/\s+/g, ' ')}](${href})`;
         });
 
-        if (textBlob) {
-            originalPlainText = await textBlob.text();
-        } else {
+        if (!textBlob) {
             originalPlainText = markdown;
+        }
+    } else if (originalPlainText) {
+        const lines = originalPlainText.trim().split(/\r?\n/);
+        if (lines.length >= 2) {
+            const tabCount = (lines[0].match(/\t/g) || []).length;
+            if (tabCount > 0) {
+                sourceType = "Plain Text (TSV Conversion)";
+                const headerCols = lines[0].split('\t');
+                markdown += '| ' + headerCols.join(' | ') + ' |\n';
+                markdown += '| ' + headerCols.map(() => '---').join(' | ') + ' |\n';
+                for (let i = 1; i < lines.length; i++) {
+                    const rowCols = lines[i].split('\t');
+                    while (rowCols.length < headerCols.length) rowCols.push('');
+                    rowCols.length = headerCols.length;
+                    markdown += '| ' + rowCols.join(' | ') + ' |\n';
+                }
+            } else {
+                return null;
+            }
+        } else {
+            return null;
         }
     } else {
         return null; // Nothing to simulate
