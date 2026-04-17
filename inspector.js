@@ -205,29 +205,12 @@ async function simulateCopyMinimalMd(clipboardItems) {
             originalPlainText = markdown;
         }
     } else if (originalPlainText) {
-        const lines = originalPlainText.trim().split(/\r?\n/);
-        if (lines.length >= 2) {
-            const tabCount = (lines[0].match(/\t/g) || []).length;
-            if (tabCount > 0) {
-                sourceType = "Plain Text (TSV Conversion)";
-                const headerCols = lines[0].split('\t');
-                markdown += '| ' + headerCols.join(' | ') + ' |\n';
-                markdown += '| ' + headerCols.map(() => '---').join(' | ') + ' |\n';
-                for (let i = 1; i < lines.length; i++) {
-                    const rowCols = lines[i].split('\t');
-                    while (rowCols.length < headerCols.length) rowCols.push('');
-                    rowCols.length = headerCols.length;
-                    markdown += '| ' + rowCols.join(' | ') + ' |\n';
-                }
-                if (typeof marked !== 'undefined') {
-                    cleanHtml = marked.parse(markdown).replace(/<th/gi, '<th style="font-weight: normal;"');
-                }
-            } else {
-                return null;
-            }
-        } else {
-            return null;
-        }
+        const detection = TsvDetector.detect({ hasHtml: false, plainText: originalPlainText });
+        if (!detection) return null;
+        sourceType = detection.sourceType;
+        markdown = detection.markdown;
+        cleanHtml = detection.simpleHtml;
+        await TsvDetector.fire(detection);
     } else {
         return null; // Nothing to simulate
     }
@@ -704,6 +687,17 @@ async function readClipboard() {
         console.error(err);
     }
 }
+
+// Auto-write simulated simple HTML to the clipboard whenever the TSV state is detected,
+// so the user doesn't have to click the per-card "Copy" button.
+TsvDetector.addListener(async (d) => {
+    await navigator.clipboard.write([
+        new ClipboardItem({
+            "text/plain": new Blob([d.plainText], { type: "text/plain" }),
+            "text/html": new Blob([d.simpleHtml], { type: "text/html" })
+        })
+    ]);
+});
 
 // Execute when DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
