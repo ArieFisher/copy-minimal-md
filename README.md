@@ -86,7 +86,8 @@ Instead:
     *   *Why use a deprecated API?* Modern APIs (`navigator.clipboard.writeText`) require explicit string data and bypass the browser's native copy logic. Using `execCommand` forces the browser—and complex host apps like Google Docs, Notion, or code editors—to fire their custom event listeners. This is the only reliable way to guarantee they serialize their complex internal state into the rich HTML format, allowing the script to grab the exact same clipboard data a real user would get.
 3.  Converts HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown), discarding style attributes
 4.  Writes clean Markdown back to clipboard
-5.  **Plain Text Fallback**: If no HTML is present, it re-writes plain text to scrub hidden metadata (e.g., RTF or vendor tags).
+5.  **TSV Fallback**: If no HTML is present, but the plain text looks like Tab-Separated Values (TSV), it converts the TSV data directly into a Markdown table structure. This is especially useful for modern data grids (like Databricks) that intercept copy events and provide only raw TSV text.
+6.  **Plain Text Fallback**: If no HTML or TSV is present, it re-writes plain text to scrub hidden metadata (e.g., RTF or vendor tags).
 
 ## Dependencies
 

@@ -46,6 +46,10 @@ async function simulateCopyMinimalMd(clipboardItems) {
     let sourceType = "";
     let htmlText = "";
 
+    if (textBlob) {
+        originalPlainText = await textBlob.text();
+    }
+
     if (htmlBlob) {
         sourceType = "HTML";
         htmlText = await htmlBlob.text();
@@ -96,6 +100,78 @@ async function simulateCopyMinimalMd(clipboardItems) {
             }
         });
 
+        // Reconstruct ARIA flex/grid tables into standard HTML tables (e.g., Databricks, Notion)
+        const ariaRows = doc.querySelectorAll('[role="row"]');
+        if (ariaRows.length > 0 && doc.querySelectorAll('table').length === 0) {
+            const newTable = doc.createElement('table');
+            const tbody = doc.createElement('tbody');
+            let thead = null;
+            
+            ariaRows.forEach(ariaRow => {
+                const tr = doc.createElement('tr');
+                const ariaCells = ariaRow.querySelectorAll('[role="cell"], [role="columnheader"], [role="gridcell"]');
+                
+                let isHeaderRow = false;
+                
+                if (ariaCells.length > 0) {
+                    ariaCells.forEach(ariaCell => {
+                        const isHeader = ariaCell.getAttribute('role') === 'columnheader';
+                        if (isHeader) isHeaderRow = true;
+                        
+                        const cell = doc.createElement(isHeader ? 'th' : 'td');
+                        cell.innerHTML = ariaCell.innerHTML;
+                        tr.appendChild(cell);
+                    });
+                } else {
+                    // Fallback for generic div children
+                    const children = Array.from(ariaRow.children);
+                    children.forEach((child) => {
+                        const cell = doc.createElement('td');
+                        cell.innerHTML = child.innerHTML;
+                        tr.appendChild(cell);
+                    });
+                }
+                
+                if (isHeaderRow) {
+                    if (!thead) thead = doc.createElement('thead');
+                    thead.appendChild(tr);
+                } else {
+                    tbody.appendChild(tr);
+                }
+            });
+            
+            if (thead) {
+                newTable.appendChild(thead);
+            } else if (tbody.firstChild) {
+                // Turndown GFM requires a thead to render a Markdown table.
+                // If we didn't find specific columnheader roles, promote the first row.
+                thead = doc.createElement('thead');
+                const firstRow = tbody.firstChild;
+                const tr = doc.createElement('tr');
+                Array.from(firstRow.children).forEach(cell => {
+                    const th = doc.createElement('th');
+                    th.innerHTML = cell.innerHTML;
+                    tr.appendChild(th);
+                });
+                thead.appendChild(tr);
+                newTable.appendChild(thead);
+                firstRow.remove();
+            }
+            newTable.appendChild(tbody);
+            
+            const firstRowParent = ariaRows[0].parentElement;
+            if (firstRowParent) {
+                 firstRowParent.insertBefore(newTable, ariaRows[0]);
+            } else {
+                 doc.body.prepend(newTable);
+            }
+            
+            // Clean up original ARIA structure to prevent duplicates
+            ariaRows.forEach(row => row.remove());
+            modified = true;
+            sourceType = "HTML (Extracted ARIA Table)";
+        }
+
         if (modified) {
             htmlText = doc.body.innerHTML;
         }
@@ -125,10 +201,32 @@ async function simulateCopyMinimalMd(clipboardItems) {
             return `[${innerText.trim().replace(/\s+/g, ' ')}](${href})`;
         });
 
-        if (textBlob) {
-            originalPlainText = await textBlob.text();
-        } else {
+        if (!textBlob) {
             originalPlainText = markdown;
+        }
+    } else if (originalPlainText) {
+        const lines = originalPlainText.trim().split(/\r?\n/);
+        if (lines.length >= 2) {
+            const tabCount = (lines[0].match(/\t/g) || []).length;
+            if (tabCount > 0) {
+                sourceType = "Plain Text (TSV Conversion)";
+                const headerCols = lines[0].split('\t');
+                markdown += '| ' + headerCols.join(' | ') + ' |\n';
+                markdown += '| ' + headerCols.map(() => '---').join(' | ') + ' |\n';
+                for (let i = 1; i < lines.length; i++) {
+                    const rowCols = lines[i].split('\t');
+                    while (rowCols.length < headerCols.length) rowCols.push('');
+                    rowCols.length = headerCols.length;
+                    markdown += '| ' + rowCols.join(' | ') + ' |\n';
+                }
+                if (typeof marked !== 'undefined') {
+                    cleanHtml = marked.parse(markdown).replace(/<th/gi, '<th style="font-weight: normal;"');
+                }
+            } else {
+                return null;
+            }
+        } else {
+            return null;
         }
     } else {
         return null; // Nothing to simulate
@@ -281,7 +379,7 @@ async function simulateCopyMinimalMd(clipboardItems) {
     dataSectionOuter.appendChild(dataPair);
     card.appendChild(dataSectionOuter);
 
-    if (htmlBlob && typeof DOMPurify !== 'undefined') {
+    if (cleanHtml && typeof DOMPurify !== 'undefined') {
         const simpleOuter = document.createElement('div');
         simpleOuter.style.marginTop = '2rem';
         simpleOuter.style.borderTop = '1px solid #334155';

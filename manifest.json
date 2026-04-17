@@ -2,7 +2,8 @@
     "manifest_version": 3,
     "name": "Docs Markdown Cleaner",
     "description": "Converts copied web content to Markdown and inspects raw clipboard contents.",
-    "version": "0.5.1",
+    "version": "0.5.3",
+    "version_name": "0.5.3",
     "permissions": [
         "activeTab",
         "scripting",
