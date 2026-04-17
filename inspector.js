@@ -219,6 +219,9 @@ async function simulateCopyMinimalMd(clipboardItems) {
                     rowCols.length = headerCols.length;
                     markdown += '| ' + rowCols.join(' | ') + ' |\n';
                 }
+                if (typeof marked !== 'undefined') {
+                    cleanHtml = marked.parse(markdown);
+                }
             } else {
                 return null;
             }
@@ -376,7 +379,7 @@ async function simulateCopyMinimalMd(clipboardItems) {
     dataSectionOuter.appendChild(dataPair);
     card.appendChild(dataSectionOuter);
 
-    if (htmlBlob && typeof DOMPurify !== 'undefined') {
+    if (cleanHtml && typeof DOMPurify !== 'undefined') {
         const simpleOuter = document.createElement('div');
         simpleOuter.style.marginTop = '2rem';
         simpleOuter.style.borderTop = '1px solid #334155';
