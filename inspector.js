@@ -220,7 +220,7 @@ async function simulateCopyMinimalMd(clipboardItems) {
                     markdown += '| ' + rowCols.join(' | ') + ' |\n';
                 }
                 if (typeof marked !== 'undefined') {
-                    cleanHtml = marked.parse(markdown);
+                    cleanHtml = marked.parse(markdown).replace(/<th/gi, '<th style="font-weight: normal;"');
                 }
             } else {
                 return null;
