@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TSV-Only Grid Copy Test</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 24px;
+      line-height: 1.45;
+    }
+    h1 { font-size: 1.3rem; }
+    h2 { font-size: 1.1rem; margin-top: 2rem; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    pre {
+      background: #0f172a;
+      padding: 10px;
+      border-radius: 4px;
+      overflow: auto;
+      font-size: 0.85rem;
+    }
+    button {
+      padding: 6px 12px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    /* Grid styling — mimics a dense custom data grid (no <table> element) */
+    #grid-root {
+      position: relative;
+      border: 1px solid #334155;
+      background: #243447;
+      width: 610px;
+      user-select: text;
+    }
+    .dg--virtual-row { display: flex; border-bottom: 1px solid #334155; }
+    .dg--cell {
+      padding: 4px 8px;
+      border-right: 1px solid #334155;
+      box-sizing: border-box;
+    }
+    .dg--selected-cell { background: #314a6e; }
+    .dg--default-cell { display: inline-block; }
+
+    .status-ok { color: #4ade80; }
+    .status-bad { color: #ef4444; }
+  </style>
+</head>
+
+<body>
+  <h1>TSV-Only Grid Copy Test</h1>
+  <p>
+    Reproduces a custom data grid whose <code>copy</code> handler writes
+    <strong>only</strong> tab-separated text to <code>text/plain</code> — no
+    <code>text/html</code> is placed on the clipboard. This is the
+    trigger state the shared <code>TsvDetector</code> is built to handle:
+    both <code>Cmd+Shift+U</code> and <code>Cmd+Shift+O</code> should detect
+    it and populate the clipboard's <code>text/html</code> with the simulated
+    simple HTML (a <code>&lt;table&gt;</code>).
+  </p>
+
+  <h2>Grid (select rows, then <code>Cmd+C</code>)</h2>
+  <div id="grid-root">
+    <div role="row" class="dg--virtual-row" style="position: relative; height: 25px;">
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="0_ObjectName" data-row="1" data-col="1" style="flex: 0 0 143px; text-align: left;"><span class="dg--default-cell">DocumentInterface</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="0_PropName" data-row="1" data-col="2" style="flex: 0 0 175px; text-align: left;"><span class="dg--default-cell">DocumentInterfaceStatus</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="0_WorkflowName" data-row="1" data-col="3" style="flex: 0 0 161px; text-align: left;"><span class="dg--default-cell">DocumentWorkflow</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="0_Id" data-row="1" data-col="4" style="flex: 0 0 90px; text-align: right;"><span class="dg--default-cell">45169</span></div>
+    </div>
+    <div role="row" class="dg--virtual-row" style="position: relative; height: 25px;">
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="1_ObjectName" data-row="2" data-col="1" style="flex: 0 0 143px; text-align: left;"><span class="dg--default-cell">Application</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="1_PropName" data-row="2" data-col="2" style="flex: 0 0 175px; text-align: left;"><span class="dg--default-cell">CreditWorkflowState</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="1_WorkflowName" data-row="2" data-col="3" style="flex: 0 0 161px; text-align: left;"><span class="dg--default-cell">CreditWorkflow</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="1_Id" data-row="2" data-col="4" style="flex: 0 0 90px; text-align: right;"><span class="dg--default-cell">45170</span></div>
+    </div>
+    <div role="row" class="dg--virtual-row" style="position: relative; height: 25px;">
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="2_ObjectName" data-row="3" data-col="1" style="flex: 0 0 143px; text-align: left;"><span class="dg--default-cell">Application</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="2_PropName" data-row="3" data-col="2" style="flex: 0 0 175px; text-align: left;"><span class="dg--default-cell">AuditFundingWorkflowState</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="2_WorkflowName" data-row="3" data-col="3" style="flex: 0 0 161px; text-align: left;"><span class="dg--default-cell">AuditFundingWorkflow</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="2_Id" data-row="3" data-col="4" style="flex: 0 0 90px; text-align: right;"><span class="dg--default-cell">45171</span></div>
+    </div>
+    <div role="row" class="dg--virtual-row" style="position: relative; height: 25px;">
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="3_ObjectName" data-row="4" data-col="1" style="flex: 0 0 143px; text-align: left;"><span class="dg--default-cell">Application</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="3_PropName" data-row="4" data-col="2" style="flex: 0 0 175px; text-align: left;"><span class="dg--default-cell">IncomeWorkflowState</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="3_WorkflowName" data-row="4" data-col="3" style="flex: 0 0 161px; text-align: left;"><span class="dg--default-cell">IncomeWorkflow</span></div>
+      <div role="cell" class="dg--cell dg--cell-lite" data-cell-id="3_Id" data-row="4" data-col="4" style="flex: 0 0 90px; text-align: right;"><span class="dg--default-cell">45172</span></div>
+    </div>
+  </div>
+
+  <h2>Expected payload on <code>text/plain</code></h2>
+  <pre id="expected-tsv"></pre>
+
+  <h2>Detector self-test</h2>
+  <p>
+    Runs the shared <code>TsvDetector</code> against the grid's TSV output
+    without needing the extension installed. Verifies that the detector
+    produces non-empty <code>markdown</code> and <code>simpleHtml</code>,
+    then shows both plus the rendered simple HTML.
+  </p>
+  <button id="run-detector">Run TsvDetector</button>
+  <div id="result" style="margin-top: 1rem;"></div>
+
+  <h2>End-to-end (with the extension installed)</h2>
+  <ol>
+    <li>Select one or more rows in the grid.</li>
+    <li>Press <code>Cmd+C</code> — the copy handler writes only TSV to <code>text/plain</code>.</li>
+    <li>Press <code>Cmd+Shift+U</code> — detector fires; clipboard now has markdown (<code>text/plain</code>) + simple HTML (<code>text/html</code>).</li>
+    <li>Alternatively: after step 2, press <code>Cmd+Shift+O</code> — inspector opens, detector fires, clipboard gets simple HTML populated on <code>text/html</code> (and the simulated cards render in the inspector).</li>
+    <li>Paste into Google Docs / Notion / Confluence — should render as a real table, not raw tab-separated text.</li>
+  </ol>
+
+  <script src="marked.min.js"></script>
+  <script src="tsv-detector.js"></script>
+  <script>
+    const gridRoot = document.getElementById('grid-root');
+
+    function collectTsv() {
+      // Walk the DOM so the TSV matches whatever is actually in the grid.
+      return Array.from(gridRoot.querySelectorAll('[role="row"]'))
+        .map(row => Array.from(row.querySelectorAll('[role="cell"]'))
+          .map(c => c.textContent)
+          .join('\t'))
+        .join('\n');
+    }
+
+    document.getElementById('expected-tsv').textContent = collectTsv();
+
+    // Simulate a real-world custom data grid: intercept the copy event and
+    // write ONLY tab-separated text to text/plain. No text/html is set.
+    document.addEventListener('copy', (e) => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed) return;
+      if (!gridRoot.contains(sel.anchorNode)) return;
+
+      e.clipboardData.setData('text/plain', collectTsv());
+      // deliberately NOT calling setData('text/html', ...) — this is the point.
+      e.preventDefault();
+    });
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    document.getElementById('run-detector').addEventListener('click', () => {
+      const tsv = collectTsv();
+      const detection = TsvDetector.detect({ hasHtml: false, plainText: tsv });
+      const result = document.getElementById('result');
+
+      if (!detection) {
+        result.innerHTML = '<p class="status-bad">FAIL: detector returned null for TSV input.</p>';
+        return;
+      }
+      const mdOk = detection.markdown && detection.markdown.includes('|');
+      const htmlOk = detection.simpleHtml && /<table/i.test(detection.simpleHtml);
+
+      result.innerHTML = `
+        <p class="${mdOk && htmlOk ? 'status-ok' : 'status-bad'}">
+          ${mdOk && htmlOk ? 'PASS' : 'FAIL'}:
+          markdown=${mdOk ? 'ok' : 'bad'}, simpleHtml=${htmlOk ? 'ok' : 'bad'},
+          sourceType="${detection.sourceType}"
+        </p>
+        <h3>markdown (goes to <code>text/plain</code>)</h3>
+        <pre>${escapeHtml(detection.markdown)}</pre>
+        <h3>simpleHtml (goes to <code>text/html</code>)</h3>
+        <pre>${escapeHtml(detection.simpleHtml)}</pre>
+        <h3>simpleHtml rendered</h3>
+        <div>${detection.simpleHtml}</div>
+      `;
+    });
+  </script>
+</body>
+
+</html>
