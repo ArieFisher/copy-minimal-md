@@ -1,3 +1,18 @@
+// Register the cmd+shift+U variant of the TSV auto-write listener once per page.
+// The content script may be re-injected on every invocation, so guard against
+// stacking duplicate listeners on the shared TsvDetector.
+if (!window.__tsvCleanerListenerRegistered) {
+    window.__tsvCleanerListenerRegistered = true;
+    TsvDetector.addListener(async (d) => {
+        await navigator.clipboard.write([
+            new ClipboardItem({
+                "text/plain": new Blob([d.markdown], { type: "text/plain" }),
+                "text/html": new Blob([d.simpleHtml], { type: "text/html" })
+            })
+        ]);
+    });
+}
+
 (async function () {
     try {
         console.log("Docs Cleaner: Starting cleaning process...");
@@ -171,11 +186,17 @@
                 console.log("Docs Cleaner: No HTML found, using Plain Text.");
                 const plainText = await textBlob.text();
 
-                // Scrubs hidden metadata (RTF, vendor tags) by rewriting as clean text
-                await navigator.clipboard.writeText(plainText);
-
-                console.log("Docs Cleaner: Plain text written to clipboard.");
-                flashSuccess("Cleaned (Text)!");
+                const detection = TsvDetector.detect({ hasHtml: false, plainText });
+                if (detection) {
+                    console.log("Docs Cleaner: TSV pattern detected; firing listeners.");
+                    await TsvDetector.fire(detection);
+                    flashSuccess("TSV Table Ready!");
+                } else {
+                    // Scrubs hidden metadata (RTF, vendor tags) by rewriting as clean text
+                    await navigator.clipboard.writeText(plainText);
+                    console.log("Docs Cleaner: Plain text written to clipboard.");
+                    flashSuccess("Cleaned (Text)!");
+                }
                 return;
             } else {
                 if (!htmlBlob && !textBlob) {
