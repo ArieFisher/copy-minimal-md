@@ -21,6 +21,76 @@ if (!window.__tsvCleanerListenerRegistered) {
         const selection = window.getSelection();
         const selectedText = selection ? selection.toString().trim() : "";
 
+        // 1.5. Build structured tables for partial selections from DOM BEFORE copying
+        let structuredDomTables = [];
+        if (selection && selection.rangeCount > 0) {
+            const allTables = document.querySelectorAll('table');
+            const intersectingTables = [];
+            for (let i = 0; i < selection.rangeCount; i++) {
+                const range = selection.getRangeAt(i);
+                allTables.forEach(t => {
+                    if (range.intersectsNode(t) && !intersectingTables.includes(t)) {
+                        intersectingTables.push(t);
+                    }
+                });
+            }
+
+            structuredDomTables = intersectingTables.map(table => {
+                let minRow = Infinity, maxRow = -1;
+                let minCol = Infinity, maxCol = -1;
+
+                // Find bounding box
+                for (let r = 0; r < table.rows.length; r++) {
+                    const row = table.rows[r];
+                    for (let c = 0; c < row.cells.length; c++) {
+                        const cell = row.cells[c];
+                        let isSelected = false;
+                        for (let i = 0; i < selection.rangeCount; i++) {
+                            if (selection.getRangeAt(i).intersectsNode(cell)) {
+                                isSelected = true;
+                                break;
+                            }
+                        }
+                        if (isSelected) {
+                            if (r < minRow) minRow = r;
+                            if (r > maxRow) maxRow = r;
+                            if (c < minCol) minCol = c;
+                            if (c > maxCol) maxCol = c;
+                        }
+                    }
+                }
+
+                if (minRow === Infinity) return null;
+
+                const newTable = document.createElement('table');
+                for (let r = minRow; r <= maxRow; r++) {
+                    const newRow = document.createElement('tr');
+                    const row = table.rows[r];
+                    if (!row) continue;
+                    
+                    for (let c = minCol; c <= maxCol; c++) {
+                        const cell = row.cells[c];
+                        let isSelected = false;
+                        if (cell) {
+                            for (let i = 0; i < selection.rangeCount; i++) {
+                                if (selection.getRangeAt(i).intersectsNode(cell)) {
+                                    isSelected = true;
+                                    break;
+                                }
+                            }
+                        }
+                        const newCell = document.createElement(cell && cell.tagName === 'TH' ? 'th' : 'td');
+                        if (isSelected) {
+                            newCell.innerHTML = cell.innerHTML;
+                        }
+                        newRow.appendChild(newCell);
+                    }
+                    newTable.appendChild(newRow);
+                }
+                return newTable;
+            }).filter(t => t);
+        }
+
         // 2. Attempt programmatic copy
         // Note: document.execCommand('copy') is broadly considered deprecated, but it is strictly REQUIRED here.
         // It tells the browser to simulate a 'Cmd+C' keystroke, guaranteeing we get the exact same
@@ -106,6 +176,20 @@ if (!window.__tsvCleanerListenerRegistered) {
 
                 let modified = false;
 
+                // Attempt to fix malformed jagged tables by replacing them with our DOM-extracted structured tables.
+                // We only do this if the number of tables extracted matches the number of tables in the clipboard HTML.
+                // This ensures we don't accidentally ruin complex structures from apps like Google Docs or Notion
+                // that might have hidden tables or use custom clipboard formats.
+                if (tables.length > 0 && structuredDomTables.length === tables.length) {
+                    for (let i = 0; i < tables.length; i++) {
+                        tables[i].replaceWith(structuredDomTables[i].cloneNode(true));
+                    }
+                    modified = true;
+                }
+
+                // Re-query tables after potential replacement for the rest of the processing
+                const currentTables = doc.querySelectorAll('table');
+
                 // Fix Google Sheets extra newlines by converting block-level divs to inline spans inside tables
                 const cells = doc.querySelectorAll('td div, th div');
                 Array.from(cells).forEach(div => {
@@ -124,7 +208,7 @@ if (!window.__tsvCleanerListenerRegistered) {
                     modified = true;
                 });
 
-                tables.forEach(table => {
+                currentTables.forEach(table => {
                     const firstRow = table.rows[0];
                     if (firstRow && !table.tHead) {
                         // Check if the first row is actually a header row (all th) despite missing thead
