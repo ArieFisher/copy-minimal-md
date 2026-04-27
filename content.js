@@ -91,6 +91,102 @@ if (!window.__tsvCleanerListenerRegistered) {
             }).filter(t => t);
         }
 
+        // 1.6. Detect ARIA grid tables (role="table" / role="grid") BEFORE copying.
+        // Sites like Google Finance Beta render their data grids as div elements with ARIA roles
+        // instead of native <table> elements. The browser clipboard for these grids contains only
+        // flat text/plain with no HTML payload, so the native table path above produces nothing.
+        // We pre-compute a structured <table> here from the live DOM selection so we can use it
+        // as a fallback when no text/html is found in the clipboard.
+        let structuredAriaHtml = null;
+        if (selection && selection.rangeCount > 0) {
+            const allAriaTables = document.querySelectorAll('[role="table"], [role="grid"], [role="treegrid"]');
+            for (const ariaTable of allAriaTables) {
+                let tableIntersects = false;
+                for (let i = 0; i < selection.rangeCount; i++) {
+                    if (selection.getRangeAt(i).intersectsNode(ariaTable)) { tableIntersects = true; break; }
+                }
+                if (!tableIntersects) continue;
+
+                const ariaRows = ariaTable.querySelectorAll('[role="row"]');
+                let minRow = Infinity, maxRow = -1, minCol = Infinity, maxCol = -1;
+
+                for (let r = 0; r < ariaRows.length; r++) {
+                    const ariaCells = ariaRows[r].querySelectorAll('[role="cell"], [role="gridcell"], [role="columnheader"], [role="rowheader"]');
+                    for (let c = 0; c < ariaCells.length; c++) {
+                        let isSelected = false;
+                        for (let i = 0; i < selection.rangeCount; i++) {
+                            if (selection.getRangeAt(i).intersectsNode(ariaCells[c])) { isSelected = true; break; }
+                        }
+                        if (isSelected) {
+                            if (r < minRow) minRow = r;
+                            if (r > maxRow) maxRow = r;
+                            if (c < minCol) minCol = c;
+                            if (c > maxCol) maxCol = c;
+                        }
+                    }
+                }
+
+                if (minRow === Infinity) continue;
+
+                const newTable = document.createElement('table');
+                let thead = null;
+                const tbody = document.createElement('tbody');
+
+                for (let r = minRow; r <= maxRow; r++) {
+                    const ariaRow = ariaRows[r];
+                    if (!ariaRow) continue;
+                    const ariaCells = ariaRow.querySelectorAll('[role="cell"], [role="gridcell"], [role="columnheader"], [role="rowheader"]');
+                    const tr = document.createElement('tr');
+                    let isHeaderRow = false;
+
+                    for (let c = minCol; c <= maxCol; c++) {
+                        const ariaCell = ariaCells[c];
+                        let isSelected = false;
+                        if (ariaCell) {
+                            for (let i = 0; i < selection.rangeCount; i++) {
+                                if (selection.getRangeAt(i).intersectsNode(ariaCell)) { isSelected = true; break; }
+                            }
+                        }
+                        const isHeader = ariaCell && ariaCell.getAttribute('role') === 'columnheader';
+                        if (isHeader) isHeaderRow = true;
+                        const cell = document.createElement(isHeader ? 'th' : 'td');
+                        if (isSelected && ariaCell) {
+                            cell.textContent = ariaCell.textContent.trim();
+                        }
+                        tr.appendChild(cell);
+                    }
+
+                    if (isHeaderRow) {
+                        if (!thead) thead = document.createElement('thead');
+                        thead.appendChild(tr);
+                    } else {
+                        tbody.appendChild(tr);
+                    }
+                }
+
+                // Turndown GFM requires a thead to render a Markdown table.
+                // If no columnheader roles exist, promote the first data row.
+                if (!thead && tbody.firstChild) {
+                    thead = document.createElement('thead');
+                    const firstDataRow = tbody.firstChild;
+                    const headerTr = document.createElement('tr');
+                    Array.from(firstDataRow.cells).forEach(cell => {
+                        const th = document.createElement('th');
+                        th.textContent = cell.textContent;
+                        headerTr.appendChild(th);
+                    });
+                    thead.appendChild(headerTr);
+                    firstDataRow.remove();
+                }
+
+                if (thead) newTable.appendChild(thead);
+                newTable.appendChild(tbody);
+                structuredAriaHtml = newTable.outerHTML;
+                console.log(`Docs Cleaner: ARIA table extracted (rows ${minRow}-${maxRow}, cols ${minCol}-${maxCol}).`);
+                break; // use the first intersecting ARIA table
+            }
+        }
+
         // 2. Attempt programmatic copy
         // Note: document.execCommand('copy') is broadly considered deprecated, but it is strictly REQUIRED here.
         // It tells the browser to simulate a 'Cmd+C' keystroke, guaranteeing we get the exact same
@@ -139,7 +235,7 @@ if (!window.__tsvCleanerListenerRegistered) {
                 // cell of the first selected row — which may come *before* where the user's highlight
                 // started. Searching only the first 100 chars would miss the user's starting cell.
                 // Broaden the search window to the full text and lower the required match count to 1.
-                const isTableSelection = structuredDomTables.length > 0;
+                const isTableSelection = structuredDomTables.length > 0 || structuredAriaHtml !== null;
                 const searchText = isTableSelection ? cleanText : cleanText.substring(0, 100);
                 const targetMatches = isTableSelection ? 1 : Math.min(3, checkWords.length);
                 const clipboardWords = searchText.split(/\s+/).filter(w => w.length > 0);
@@ -296,6 +392,25 @@ if (!window.__tsvCleanerListenerRegistered) {
             } else if (textBlob) {
                 // Plain Text Fallback
                 console.log("Docs Cleaner: No HTML found, using Plain Text.");
+
+                // ARIA table intercept: if we pre-computed a structured table from ARIA DOM
+                // elements, synthesize Markdown from it instead of the flat plain text.
+                // This handles sites like Google Finance Beta that produce no text/html payload.
+                if (structuredAriaHtml) {
+                    console.log("Docs Cleaner: ARIA grid detected; synthesizing Markdown from DOM structure.");
+                    const cleanAriaHtml = DOMPurify.sanitize(structuredAriaHtml, {
+                        ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                        ALLOWED_ATTR: [],
+                        ALLOW_DATA_ATTR: false
+                    });
+                    const ariaTurndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+                    ariaTurndown.use(turndownPluginGfm.gfm);
+                    const ariaMarkdown = ariaTurndown.turndown(cleanAriaHtml);
+                    await navigator.clipboard.writeText(ariaMarkdown);
+                    console.log("Docs Cleaner: ARIA Markdown written to clipboard.");
+                    flashSuccess("ARIA Table Ready!");
+                    return;
+                }
                 const plainText = await textBlob.text();
 
                 const detection = TsvDetector.detect({ hasHtml: false, plainText });
