@@ -132,13 +132,19 @@ if (!window.__tsvCleanerListenerRegistered) {
             // If the clipboard text doesn't contain a significant chunk of our selection, 
             // the copy probably failed silently.
             if (selectedText && cleanText) {
-                // Use a word-intersection check to avoid issues with formatting/whitespace diffs from grid/flexbox layouts
+                // Use a word-intersection check to avoid issues with formatting/whitespace diffs from grid/flexbox layouts.
                 const checkWords = selectedText.substring(0, 50).split(/\s+/).filter(w => w.length > 0);
-                const clipboardWords = cleanText.substring(0, 100).split(/\s+/).filter(w => w.length > 0);
+
+                // For table selections, the browser's plain-text clipboard payload starts at the leftmost
+                // cell of the first selected row — which may come *before* where the user's highlight
+                // started. Searching only the first 100 chars would miss the user's starting cell.
+                // Broaden the search window to the full text and lower the required match count to 1.
+                const isTableSelection = structuredDomTables.length > 0;
+                const searchText = isTableSelection ? cleanText : cleanText.substring(0, 100);
+                const targetMatches = isTableSelection ? 1 : Math.min(3, checkWords.length);
+                const clipboardWords = searchText.split(/\s+/).filter(w => w.length > 0);
 
                 let matchCount = 0;
-                const targetMatches = Math.min(3, checkWords.length);
-
                 for (const word of checkWords) {
                     if (clipboardWords.includes(word)) {
                         matchCount++;
@@ -177,20 +183,42 @@ if (!window.__tsvCleanerListenerRegistered) {
                 let modified = false;
 
                 // Attempt to fix malformed jagged tables by replacing them with our DOM-extracted structured tables.
-                // We only do this if the number of tables extracted matches the number of tables in the clipboard HTML.
-                // This ensures we don't accidentally ruin complex structures from apps like Google Docs or Notion
-                // that might have hidden tables or use custom clipboard formats.
+                // Guard 1: table counts must match — prevents accidentally replacing tables in apps like Google Docs
+                //   or Notion that emit hidden wrapper/layout tables in their clipboard HTML.
+                // Guard 2: column count sanity — if the clipboard table's max column count is more than 2× our
+                //   DOM table's column count it is almost certainly a different (layout) table, not the data table
+                //   the user selected. Skip replacement in that case.
                 if (tables.length > 0 && structuredDomTables.length === tables.length) {
+                    let structureMatch = true;
                     for (let i = 0; i < tables.length; i++) {
-                        tables[i].replaceWith(structuredDomTables[i].cloneNode(true));
+                        const maxClipboardCols = Math.max(...Array.from(tables[i].rows).map(r => r.cells.length));
+                        const domCols = structuredDomTables[i].rows[0]?.cells.length || 0;
+                        if (domCols > 0 && maxClipboardCols > domCols * 2) {
+                            console.warn(`Docs Cleaner: Table ${i} column mismatch (clipboard max: ${maxClipboardCols}, dom: ${domCols}). Skipping structured replacement.`);
+                            structureMatch = false;
+                            break;
+                        }
                     }
-                    modified = true;
+                    if (structureMatch) {
+                        for (let i = 0; i < tables.length; i++) {
+                            // Explicitly adopt the node into the DOMParser document before inserting.
+                            // cloneNode alone creates a node owned by the live page document; adoptNode
+                            // transfers ownership to doc, preventing any cross-document reference issues.
+                            tables[i].replaceWith(doc.adoptNode(structuredDomTables[i].cloneNode(true)));
+                        }
+                        modified = true;
+                    }
                 }
 
-                // Re-query tables after potential replacement for the rest of the processing
+                // Re-query tables after potential replacement for the rest of the processing.
+                // Note: if structuredDomTables was empty (e.g. the page renders its grid with JS/canvas
+                // or <div> elements — as some versions of Google Finance do — rather than native <table>
+                // elements), the replacement block above was a no-op and we fall through here using the
+                // browser's native clipboard HTML as-is.
                 const currentTables = doc.querySelectorAll('table');
 
-                // Fix Google Sheets extra newlines by converting block-level divs to inline spans inside tables
+                // Fix Google Sheets extra newlines by converting block-level divs to inline spans inside tables.
+                // Queried from the full doc (not scoped to currentTables) so freshly adopted nodes are included.
                 const cells = doc.querySelectorAll('td div, th div');
                 Array.from(cells).forEach(div => {
                     const span = doc.createElement('span');
