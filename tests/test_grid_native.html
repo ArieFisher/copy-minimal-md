@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GridDetector — Native Table Tests</title>
+  <style>
+    body { font-family: sans-serif; max-width: 960px; margin: 2rem auto; background: #0f172a; color: #e2e8f0; }
+    h1 { color: #7dd3fc; }
+    h2 { color: #94a3b8; font-size: 1rem; margin-top: 2rem; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; background: #1e293b; }
+    th, td { border: 1px solid #334155; padding: 6px 12px; text-align: left; font-size: 0.85rem; }
+    th { background: #1e3a5f; color: #7dd3fc; }
+    .test-block { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 1rem; margin: 1.5rem 0; }
+    .test-block h2 { margin-top: 0; }
+    button { background: #3b82f6; color: white; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; margin-right: 8px; margin-bottom: 8px; }
+    button:hover { background: #2563eb; }
+    .result { background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 0.75rem; margin-top: 0.75rem; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; min-height: 2rem; }
+    .pass { border-color: #22c55e; color: #86efac; }
+    .fail { border-color: #ef4444; color: #fca5a5; }
+    .info { color: #94a3b8; }
+    .highlight { background: #1e3a5f !important; outline: 2px solid #3b82f6; }
+  </style>
+</head>
+<body>
+  <h1>GridDetector — Native Table Tests</h1>
+  <p class="info">Tests the NativeTableStrategy. Each test makes a programmatic selection then calls GridDetector.extract().</p>
+
+  <!-- The test table (Wikipedia-style) -->
+  <table id="test-table" class="wikitable">
+    <thead>
+      <tr><th>Rank</th><th>Municipality</th><th>Province</th><th>Population</th><th>Area (km²)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>Toronto</td><td>Ontario</td><td>2,794,356</td><td>630.2</td></tr>
+      <tr><td>2</td><td>Montreal</td><td>Quebec</td><td>2,049,789</td><td>365.1</td></tr>
+      <tr><td>3</td><td>Calgary</td><td>Alberta</td><td>1,336,000</td><td>825.3</td></tr>
+      <tr><td>4</td><td>Ottawa</td><td>Ontario</td><td>1,017,449</td><td>2,790.3</td></tr>
+      <tr><td>5</td><td>Edmonton</td><td>Alberta</td><td>1,010,899</td><td>684.4</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Test 1: Full rows, all columns -->
+  <div class="test-block">
+    <h2>Test 1 — Full rows (rows 1–2, all columns)</h2>
+    <p class="info">Expected: type='native', 5 columns, 2 data rows, all cells populated.</p>
+    <button onclick="runTest1()">Run Test</button>
+    <div class="result" id="result1">Not run yet.</div>
+  </div>
+
+  <!-- Test 2: Partial first and last row (the original bug) -->
+  <div class="test-block">
+    <h2>Test 2 — Partial first/last row (cols 1–3 of row 0, cols 0–2 of row 2)</h2>
+    <p class="info">Expected: type='native', bounding box = cols 1–3, rows 0–2. Cells outside selection are empty &lt;td&gt;.</p>
+    <button onclick="runTest2()">Run Test</button>
+    <div class="result" id="result2">Not run yet.</div>
+  </div>
+
+  <!-- Test 3: Single cell -->
+  <div class="test-block">
+    <h2>Test 3 — Single cell (row 3, col 2 "Ontario")</h2>
+    <p class="info">Expected: type='native', 1x1 table, cell contains "Ontario".</p>
+    <button onclick="runTest3()">Run Test</button>
+    <div class="result" id="result3">Not run yet.</div>
+  </div>
+
+  <!-- Test 4: No table in selection -->
+  <div class="test-block">
+    <h2>Test 4 — Selection outside any table</h2>
+    <p class="info">Expected: null (NativeTableStrategy finds no intersecting table).</p>
+    <button onclick="runTest4()">Run Test</button>
+    <div class="result" id="result4">Not run yet.</div>
+  </div>
+
+  <script src="../grid-detector.js"></script>
+  <script>
+    const table = document.getElementById('test-table');
+
+    function selectRange(startCell, endCell) {
+      const range = document.createRange();
+      range.setStartBefore(startCell);
+      range.setEndAfter(endCell);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return sel;
+    }
+
+    function renderResult(elId, result, expected) {
+      const el = document.getElementById(elId);
+      if (!result) {
+        el.textContent = 'Result: null';
+        el.className = 'result ' + (expected === null ? 'pass' : 'fail');
+        return;
+      }
+      const rows = result.tables?.[0]?.rows;
+      const rowCount = rows?.length ?? 0;
+      const colCount = rows?.[0]?.cells?.length ?? 0;
+      const sample = result.tables?.[0]?.outerHTML?.substring(0, 400) ?? '';
+
+      let pass = result.type === expected?.type &&
+                 rowCount === expected?.rows &&
+                 colCount === expected?.cols;
+
+      el.className = 'result ' + (pass ? 'pass' : 'fail');
+      el.textContent = [
+        `type:    ${result.type}`,
+        `tables:  ${result.tables?.length}`,
+        `rows:    ${rowCount}`,
+        `cols:    ${colCount}`,
+        `status:  ${pass ? '✅ PASS' : '❌ FAIL (expected: ' + JSON.stringify(expected) + ')'}`,
+        ``,
+        `HTML preview:`,
+        sample
+      ].join('\n');
+    }
+
+    function runTest1() {
+      // Rows 1–2 (tbody rows 0–1), all 5 cols
+      const startCell = table.tBodies[0].rows[0].cells[0];
+      const endCell   = table.tBodies[0].rows[1].cells[4];
+      const sel = selectRange(startCell, endCell);
+      const result = GridDetector.extract(sel);
+      renderResult('result1', result, { type: 'native', rows: 2, cols: 5 });
+    }
+
+    function runTest2() {
+      // Start: row 0 (thead), col 1. End: tbody row 2, col 2.
+      const startCell = table.tHead.rows[0].cells[1];
+      const endCell   = table.tBodies[0].rows[2].cells[2];
+      const sel = selectRange(startCell, endCell);
+      const result = GridDetector.extract(sel);
+      // Full intermediate rows (Toronto, Montreal) fall entirely within the range,
+      // so all their cells intersect — expanding the bounding box to cols 0–4.
+      // Empty <td>s are placed for cells outside the actual selection.
+      // Expected: 4 rows (thead + 3 tbody), 5 cols (full bounding box).
+      renderResult('result2', result, { type: 'native', rows: 4, cols: 5 });
+    }
+
+    function runTest3() {
+      // Single cell: tbody row 3, col 2 ("Ontario")
+      const cell = table.tBodies[0].rows[3].cells[2];
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      const result = GridDetector.extract(sel);
+      renderResult('result3', result, { type: 'native', rows: 1, cols: 1 });
+    }
+
+    function runTest4() {
+      // Select the page heading (outside the table)
+      const heading = document.querySelector('h1');
+      const range = document.createRange();
+      range.selectNodeContents(heading);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      const result = GridDetector.extract(sel);
+      renderResult('result4', result, null);
+    }
+  </script>
+</body>
+</html>

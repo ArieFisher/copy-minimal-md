@@ -21,6 +21,12 @@ if (!window.__tsvCleanerListenerRegistered) {
         const selection = window.getSelection();
         const selectedText = selection ? selection.toString().trim() : "";
 
+        // 1.5. Pre-compute grid structure from the live DOM BEFORE copying.
+        // GridDetector tries native <table>, ARIA role, and heuristic div strategies in order.
+        // The result is used post-copy to either fix jagged clipboard HTML (type='native') or
+        // synthesize structured Markdown when no HTML payload exists (type='aria'/'heuristic').
+        const gridResult = GridDetector.extract(selection);
+
         // 2. Attempt programmatic copy
         // Note: document.execCommand('copy') is broadly considered deprecated, but it is strictly REQUIRED here.
         // It tells the browser to simulate a 'Cmd+C' keystroke, guaranteeing we get the exact same
@@ -62,13 +68,19 @@ if (!window.__tsvCleanerListenerRegistered) {
             // If the clipboard text doesn't contain a significant chunk of our selection, 
             // the copy probably failed silently.
             if (selectedText && cleanText) {
-                // Use a word-intersection check to avoid issues with formatting/whitespace diffs from grid/flexbox layouts
+                // Use a word-intersection check to avoid issues with formatting/whitespace diffs from grid/flexbox layouts.
                 const checkWords = selectedText.substring(0, 50).split(/\s+/).filter(w => w.length > 0);
-                const clipboardWords = cleanText.substring(0, 100).split(/\s+/).filter(w => w.length > 0);
+
+                // For table selections, the browser's plain-text clipboard payload starts at the leftmost
+                // cell of the first selected row — which may come *before* where the user's highlight
+                // started. Searching only the first 100 chars would miss the user's starting cell.
+                // Broaden the search window to the full text and lower the required match count to 1.
+                const isTableSelection = gridResult !== null;
+                const searchText = isTableSelection ? cleanText : cleanText.substring(0, 100);
+                const targetMatches = isTableSelection ? 1 : Math.min(3, checkWords.length);
+                const clipboardWords = searchText.split(/\s+/).filter(w => w.length > 0);
 
                 let matchCount = 0;
-                const targetMatches = Math.min(3, checkWords.length);
-
                 for (const word of checkWords) {
                     if (clipboardWords.includes(word)) {
                         matchCount++;
@@ -106,7 +118,43 @@ if (!window.__tsvCleanerListenerRegistered) {
 
                 let modified = false;
 
-                // Fix Google Sheets extra newlines by converting block-level divs to inline spans inside tables
+                // Attempt to fix malformed jagged tables by replacing them with our DOM-extracted structured tables.
+                // Guard 1: table counts must match — prevents accidentally replacing tables in apps like Google Docs
+                //   or Notion that emit hidden wrapper/layout tables in their clipboard HTML.
+                // Guard 2: column count sanity — if the clipboard table's max column count is more than 2× our
+                //   DOM table's column count it is almost certainly a different (layout) table, not the data table
+                //   the user selected. Skip replacement in that case.
+                if (tables.length > 0 && gridResult?.type === 'native' && gridResult.tables.length === tables.length) {
+                    let structureMatch = true;
+                    for (let i = 0; i < tables.length; i++) {
+                        const maxClipboardCols = Math.max(...Array.from(tables[i].rows).map(r => r.cells.length));
+                        const domCols = gridResult.tables[i].rows[0]?.cells.length || 0;
+                        if (domCols > 0 && maxClipboardCols > domCols * 2) {
+                            console.warn(`Docs Cleaner: Table ${i} column mismatch (clipboard max: ${maxClipboardCols}, dom: ${domCols}). Skipping structured replacement.`);
+                            structureMatch = false;
+                            break;
+                        }
+                    }
+                    if (structureMatch) {
+                        for (let i = 0; i < tables.length; i++) {
+                            // Explicitly adopt the node into the DOMParser document before inserting.
+                            // cloneNode alone creates a node owned by the live page document; adoptNode
+                            // transfers ownership to doc, preventing any cross-document reference issues.
+                            tables[i].replaceWith(doc.adoptNode(gridResult.tables[i].cloneNode(true)));
+                        }
+                        modified = true;
+                    }
+                }
+
+                // Re-query tables after potential replacement for the rest of the processing.
+                // Note: if structuredDomTables was empty (e.g. the page renders its grid with JS/canvas
+                // or <div> elements — as some versions of Google Finance do — rather than native <table>
+                // elements), the replacement block above was a no-op and we fall through here using the
+                // browser's native clipboard HTML as-is.
+                const currentTables = doc.querySelectorAll('table');
+
+                // Fix Google Sheets extra newlines by converting block-level divs to inline spans inside tables.
+                // Queried from the full doc (not scoped to currentTables) so freshly adopted nodes are included.
                 const cells = doc.querySelectorAll('td div, th div');
                 Array.from(cells).forEach(div => {
                     const span = doc.createElement('span');
@@ -124,7 +172,7 @@ if (!window.__tsvCleanerListenerRegistered) {
                     modified = true;
                 });
 
-                tables.forEach(table => {
+                currentTables.forEach(table => {
                     const firstRow = table.rows[0];
                     if (firstRow && !table.tHead) {
                         // Check if the first row is actually a header row (all th) despite missing thead
@@ -184,6 +232,25 @@ if (!window.__tsvCleanerListenerRegistered) {
             } else if (textBlob) {
                 // Plain Text Fallback
                 console.log("Docs Cleaner: No HTML found, using Plain Text.");
+
+                // Grid table intercept: if we pre-computed a structured table from ARIA or heuristic
+                // DOM detection, synthesize Markdown from it instead of the flat plain text.
+                // This handles sites like Google Finance Beta that produce no text/html payload.
+                if (gridResult?.type === 'aria' || gridResult?.type === 'heuristic') {
+                    console.log(`Docs Cleaner: ${gridResult.type} grid detected; synthesizing Markdown from DOM structure.`);
+                    const cleanGridHtml = DOMPurify.sanitize(gridResult.tables[0].outerHTML, {
+                        ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                        ALLOWED_ATTR: [],
+                        ALLOW_DATA_ATTR: false
+                    });
+                    const gridTurndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+                    gridTurndown.use(turndownPluginGfm.gfm);
+                    const gridMarkdown = gridTurndown.turndown(cleanGridHtml);
+                    await navigator.clipboard.writeText(gridMarkdown);
+                    console.log("Docs Cleaner: Grid Markdown written to clipboard.");
+                    flashSuccess("Grid Table Ready!");
+                    return;
+                }
                 const plainText = await textBlob.text();
 
                 const detection = TsvDetector.detect({ hasHtml: false, plainText });

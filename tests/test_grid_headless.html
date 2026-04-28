@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>GridDetector Headless Test Runner</title></head>
+<body>
+<div id="output"></div>
+<script src="../grid-detector.js"></script>
+<script>
+(function () {
+  const results = [];
+
+  function assert(label, actual, expected) {
+    const pass =
+      actual !== null &&
+      actual.type === expected.type &&
+      actual.tables?.length >= 1 &&
+      actual.tables[0].rows.length === expected.rows &&
+      actual.tables[0].rows[0]?.cells.length === expected.cols;
+    results.push({ label, pass, actual: actual ? { type: actual.type, rows: actual.tables[0]?.rows.length, cols: actual.tables[0]?.rows[0]?.cells.length } : null, expected });
+  }
+
+  function assertNull(label, actual) {
+    const pass = actual === null;
+    results.push({ label, pass, actual, expected: null });
+  }
+
+  function selectRange(start, end) {
+    const range = document.createRange();
+    range.setStartBefore(start);
+    range.setEndAfter(end);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return sel;
+  }
+
+  // ── Build native test table ──────────────────────────────────────────────
+  const table = document.createElement('table');
+  table.id = 'wiki';
+  table.innerHTML = `
+    <thead><tr><th>Rank</th><th>Municipality</th><th>Province</th><th>Population</th><th>Area</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Toronto</td><td>Ontario</td><td>2,794,356</td><td>630.2</td></tr>
+      <tr><td>2</td><td>Montreal</td><td>Quebec</td><td>2,049,789</td><td>365.1</td></tr>
+      <tr><td>3</td><td>Calgary</td><td>Alberta</td><td>1,336,000</td><td>825.3</td></tr>
+      <tr><td>4</td><td>Ottawa</td><td>Ontario</td><td>1,017,449</td><td>2,790.3</td></tr>
+      <tr><td>5</td><td>Edmonton</td><td>Alberta</td><td>1,010,899</td><td>684.4</td></tr>
+    </tbody>`;
+  document.body.appendChild(table);
+
+  // ── Build GF Beta div grid ───────────────────────────────────────────────
+  const grid = document.createElement('div');
+  grid.id = 'gf-grid';
+  grid.innerHTML = `
+    <div class="q5BFQ">
+      <div class="KxsRFb"><div class="SwQK7">Open</div><div class="dO6ijd">$266.09</div></div>
+      <div class="KxsRFb"><div class="SwQK7">High</div><div class="dO6ijd">$268.36</div></div>
+      <div class="KxsRFb"><div class="SwQK7">Low</div><div class="dO6ijd">$265.07</div></div>
+    </div>
+    <div class="q5BFQ">
+      <div class="KxsRFb"><div class="SwQK7">Dividend</div><div class="dO6ijd">0.39%</div></div>
+      <div class="KxsRFb"><div class="SwQK7">P/E ratio</div><div class="dO6ijd">33.70</div></div>
+    </div>`;
+  document.body.appendChild(grid);
+
+  // ── Native table tests ───────────────────────────────────────────────────
+
+  // T1: Full rows, all cols
+  assert(
+    'T1 [native] full rows (rows 1–2, all cols)',
+    GridDetector.extract(selectRange(table.tBodies[0].rows[0].cells[0], table.tBodies[0].rows[1].cells[4])),
+    { type: 'native', rows: 2, cols: 5 }
+  );
+
+  // T2: Partial first/last row — full intermediate rows expand the bounding box
+  assert(
+    'T2 [native] partial first/last row (thead col 1 → Calgary col 2)',
+    GridDetector.extract(selectRange(table.tHead.rows[0].cells[1], table.tBodies[0].rows[2].cells[2])),
+    { type: 'native', rows: 4, cols: 5 }
+  );
+
+  // T3: Single cell
+  assert(
+    'T3 [native] single cell (Ottawa Province)',
+    GridDetector.extract((() => {
+      const cell = table.tBodies[0].rows[3].cells[2];
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return sel;
+    })()),
+    { type: 'native', rows: 1, cols: 1 }
+  );
+
+  // T4: Selection outside table → null
+  assertNull(
+    'T4 [native] selection outside table',
+    GridDetector.extract((() => {
+      const h = document.querySelector('h1') || document.createElement('span');
+      h.textContent = 'heading';
+      document.body.prepend(h);
+      const range = document.createRange();
+      range.selectNodeContents(h);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return sel;
+    })())
+  );
+
+  // ── Div grid tests ───────────────────────────────────────────────────────
+
+  // T5: No native table → NativeTableStrategy skips
+  // T6: No ARIA roles → AriaGridStrategy skips
+  // T7: HeuristicDivStrategy is placeholder → null
+  const items = document.querySelectorAll('.KxsRFb');
+  assertNull(
+    'T5 [div] GF Beta grid → GridDetector returns null (no strategy matches)',
+    GridDetector.extract(selectRange(items[0], items[2]))
+  );
+
+  // ── DOM inventory assertions ─────────────────────────────────────────────
+  results.push({
+    label: 'T6 [div] DOM has no native tables in grid container',
+    pass: grid.querySelectorAll('table').length === 0,
+    actual: grid.querySelectorAll('table').length,
+    expected: 0
+  });
+  results.push({
+    label: 'T7 [div] DOM has no ARIA role roots in grid container',
+    pass: grid.querySelectorAll('[role="table"],[role="grid"],[role="treegrid"]').length === 0,
+    actual: grid.querySelectorAll('[role="table"],[role="grid"],[role="treegrid"]').length,
+    expected: 0
+  });
+  results.push({
+    label: 'T8 [div] .KxsRFb items found',
+    pass: items.length === 5,
+    actual: items.length,
+    expected: 5
+  });
+
+  // ── Report ───────────────────────────────────────────────────────────────
+  const passed = results.filter(r => r.pass).length;
+  const failed = results.filter(r => !r.pass).length;
+
+  // Write JSON result for headless scraping
+  const summary = { passed, failed, results };
+  document.getElementById('output').setAttribute('data-results', JSON.stringify(summary));
+  document.title = `Tests: ${passed} passed, ${failed} failed`;
+
+  // Also pretty-print to body for human viewing
+  const pre = document.createElement('pre');
+  pre.textContent = results.map(r =>
+    `${r.pass ? '✅' : '❌'} ${r.label}\n   actual: ${JSON.stringify(r.actual)}  expected: ${JSON.stringify(r.expected)}`
+  ).join('\n') + `\n\n${passed}/${results.length} passed`;
+  document.body.appendChild(pre);
+})();
+</script>
+</body>
+</html>

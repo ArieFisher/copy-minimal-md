@@ -21,8 +21,6 @@ Converts copied web content to Markdown—preserving structure (tables, headers,
 RevenueImpressions1512721403113913970292114095101792637693774201147111
 ```
 
-There are other problems this addresses, (e.g. pasting into Google Docs perserves *too much* formatting) but 'tables back-and-forth to LLMs' was the genesis.
-
 ## The Solution: a new 'copy' function
 
 This one desiged for portability: it copies *text* and *structure* -- in a way that LLMs natively understand.
@@ -30,15 +28,17 @@ This one desiged for portability: it copies *text* and *structure* -- in a way t
 Which format?  JSON preserves text and structure while shedding formatting.  So does XML. 
 
 ### Markdown
-While LLMs can interpret this format, there is a lighter weight choice that is natively understood by more of the tools that I use.  When Markdown is pasted into many tools, it will render as an actual table (vs. a blog of code or XML): tools like Google Docs, Notion, Obsidian, python editors (e.g. Notebooks), Confluence, Jira, GitHub, and a host of others. 
+While LLMs can interpret this format, there is a lighter weight choice that is natively understood by more and more tools.  When a Markdown table is pasted into many tools, it will render as an actual table (not true for JSON or XML): tools like Google Docs, Notion, Obsidian, python / jupyter notebooks, Confluence, Jira, GitHub, and a host of others.
 
-So the solution is a new **copy function** that copies the selection and then converts the clipboard contents into **Markdown**.
+The solution is a new **copy function** that copies the selection and then converts the clipboard contents into **Markdown**.
 
 It is desiged for data 'portability':
-* copying tables to and from spreadsheets and LLMs
-* copying regular text between 'websites' (traditional websites, SaaS tools like Google Docs, LLM output....):
 
-That second use case means avoiding the tedious:
+(1) copying tables between spreadsheets and LLMs
+
+(2) copying regular text between 'websites' (traditional websites, SaaS tools, LLM chatbots ....):
+
+This second way helps avoid a tedious dance that you may have experience with:
 
  * copy from the web/LLM/....
  * paste into a Google Doc
@@ -50,26 +50,25 @@ That second use case means avoiding the tedious:
 
 Instead:
 
- * copy2MD from the web/LLM/....
- * 'Paste from Markdown' into a Google Doc
+ * copy-minimal-md ....
+ * 'Paste from Markdown' into a Google Doc (or regular paste into many other tools)
 
 
-## Why this tool?
+## Why have I developed this tool?
 
-**Learning:** I did this to experiment with Agentic Development applied to a (minor) irritant.
+**Learning:** To experiment with Agentic Development applied to a (minor) irritant.
 
-**Security:** There are many available Chrome extensions, but I try to avoid installing tools from unknown sources.
+**Security:** I try to avoid installing Chrome Extensions and software from unknown authors.
 
-**Unique use case:** Some alternatives (like [Markdownload](https://github.com/deathau/markdownload)) or the very cool [Jina.ai](https://jina.ai/reader/) extract full pages and save them as files. I wanted a very simple clipboard utility.
+**Unique use case:** Some alternatives (like [Markdownload](https://github.com/deathau/markdownload)) or the very cool [Jina.ai](https://jina.ai/reader/) extract full pages and save them as files. I wanted to use/create a very simple clipboard utility.  note: simplicity is not synonymous with 'easy'.
 
-**What should you do:** There are many mature, well-maintained, more feature-rich tools; use what feels good to you.
+**Should you use this tool?** There are many mature, well-maintained, more feature-rich tools; use what feels good to you.
 
 ## Features
-
-*   **Clipboard integration**: Automatically updates your clipboard with clean Markdown
-*   **Local processing**: No data sent to an external service
 *   **Strips inline styles**: Removes font families, colors, and background highlights
 *   **Preserves structure**: Headings, bold, italics, links, lists, and tables
+*   **Clipboard integration**: Automatically updates your clipboard with clean Markdown
+*   **Local processing**: No data sent to an external service
 
 ## Usage
 
@@ -77,28 +76,37 @@ Instead:
 2.  Press the keyboard shortcut:
     *   **Mac**: `Cmd + Shift + U`
     *   **Windows/Linux**: `Ctrl + Shift + U`
-3.  **Paste** (`Cmd+V` / `Ctrl+V`) — now clean Markdown
+3.  **Paste** (`Cmd+V` / `Ctrl+V`) — pastes clean Markdown
 
 ## How It Works
 
-1.  Background script listens for the command (`run-markdown-clean`)
-2.  Programmatically triggers 'copy' (`document.execCommand('copy')`) to simulate a native user copy (`Cmd+C`). 
-    *   *Why use a deprecated API?* Modern APIs (`navigator.clipboard.writeText`) require explicit string data and bypass the browser's native copy logic. Using `execCommand` forces the browser—and complex host apps like Google Docs, Notion, or code editors—to fire their custom event listeners. This is the only reliable way to guarantee they serialize their complex internal state into the rich HTML format, allowing the script to grab the exact same clipboard data a real user would get.
-3.  Converts HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown), discarding style attributes
-4.  Writes clean Markdown back to clipboard
-5.  **TSV Fallback**: If no HTML is present, but the plain text looks like Tab-Separated Values (TSV), it converts the TSV data directly into a Markdown table structure. This is especially useful for modern data grids (like Databricks) that intercept copy events and provide only raw TSV text.
-6.  **Plain Text Fallback**: If no HTML or TSV is present, it re-writes plain text to scrub hidden metadata (e.g., RTF or vendor tags).
+1.  **Selection Capture**: The script captures the user's current selection and immediately analyzes the DOM for structured data (tables/grids).
+2.  **Grid Detection (Strategy Pattern)**: Before the copy occurs, the `GridDetector` evaluates the selection against three strategies:
+    *   **Native Table**: Detects standard `<table>` structures. It calculates a "bounding box" of the selection and reconstructs a perfect grid in memory, padding unselected cells with empty spaces to maintain alignment.
+    *   **ARIA Grid**: Detects modern data grids (divs/spans with `role="grid"`). It extracts the data and transforms it into a standard HTML `<table>` for the Markdown converter.
+    *   **Heuristic Div (Planned)**: Fingerprints custom `display: flex/grid` containers that lack semantic markers.
+3.  **Native Copy Execution**: Triggers `document.execCommand('copy')` to simulate a `Cmd+C`. 
+    *   *Why?* This is the only way to force complex apps (Google Docs, Notion, Confluence) to fire their custom serializers and provide the rich HTML payload we need.
+4.  **Clipboard Repair & Synthesis**:
+    *   **Repair**: If a native table was selected, the script replaces the browser's "jagged" clipboard HTML with the reconstructed "perfect" table from step 2.
+    *   **Synthesis**: If an ARIA grid was detected but the browser provided no HTML payload, the script synthesizes a table directly from the DOM extraction.
+5.  **Markdown Conversion**: Converts the final sanitized HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown).
+6.  **TSV Fallback**: If no HTML is present but the plain text looks like Tab-Separated Values (TSV), it converts the TSV data directly into a Markdown table.
+7.  **Clipboard Update**: Writes the final clean Markdown back to the clipboard.
 
 ## Dependencies
 
+Third-party libraries are located in the `lib/` directory:
 *   [Turndown](https://github.com/mixmark-io/turndown) — HTML to Markdown converter
 *   [Turndown Plugin GFM](https://github.com/mixmark-io/turndown-plugin-gfm) — Tables and strikethrough support
+*   [DOMPurify](https://github.com/cure53/dompurify) — Robust XSS sanitization for HTML payloads
+*   [Marked](https://github.com/markedjs/marked) — Markdown parser (used for rendering previews in the Inspector)
 
 ## Chrome Extension Permissions
 
-*   `activeTab`: Execute script on current page
-*   `scripting`: Inject library files
-*   `clipboardRead` / `clipboardWrite`: Modify clipboard content
+*   `activeTab`: Execute the script on the currently active tab.
+*   `scripting`: Inject content scripts and library files into the page.
+*   `clipboardRead` / `clipboardWrite`: Intercept and modify clipboard content for cleaning.
 
 ## Installation
 
@@ -114,6 +122,6 @@ Install as an unpacked extension:
 
 ### "Copy Failed: Clipboard content mismatch"
 
-**issue:** When the clipboard contents doesn't match current selection, it won't run and destroy whatever you have in the clipboard.
+**issue:** When the clipboard contents doesn't match current selection, it won't run (and risk overwriting whatever you already had in the clipboard.)
 **fix:**  manually copy (`Cmd+C` / `Ctrl+C`) first, then run the shortcut.  
 **fix:**  manually copy (`Cmd+C` / `Ctrl+C`) first.  Then deselect text and press `Cmd + Shift + U`.  This will convert *what is already inside the clipboard*.

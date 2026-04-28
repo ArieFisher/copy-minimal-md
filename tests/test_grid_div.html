@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GridDetector — Div Grid Tests (Google Finance Beta DOM)</title>
+  <style>
+    body { font-family: sans-serif; max-width: 960px; margin: 2rem auto; background: #0f172a; color: #e2e8f0; }
+    h1 { color: #7dd3fc; }
+    h2 { color: #94a3b8; font-size: 1rem; margin-top: 2rem; }
+    .info { color: #94a3b8; }
+
+    /* Replicate Google Finance Beta grid layout exactly */
+    .CClBMb { display: flex; gap: 0; }
+    .q5BFQ  { display: flex; flex-direction: column; flex: 1; border-right: 1px solid #333; padding: 0 12px; }
+    .q5BFQ:last-child { border-right: none; }
+    .KxsRFb { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #1e293b; }
+    .KxsRFb:last-child { border-bottom: none; }
+    .SwQK7  { color: #94a3b8; font-size: 0.8rem; }
+    .dO6ijd { color: #e2e8f0; font-size: 0.85rem; font-weight: 500; }
+
+    .test-block { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 1rem; margin: 1.5rem 0; }
+    .test-block h2 { margin-top: 0; }
+    button { background: #3b82f6; color: white; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; margin-right: 8px; margin-bottom: 8px; }
+    button:hover { background: #2563eb; }
+    .result { background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 0.75rem; margin-top: 0.75rem; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; min-height: 2rem; }
+    .pass   { border-color: #22c55e; color: #86efac; }
+    .fail   { border-color: #ef4444; color: #fca5a5; }
+    .neutral { border-color: #f59e0b; color: #fde68a; }
+  </style>
+</head>
+<body>
+  <h1>GridDetector — Div Grid Tests</h1>
+  <p class="info">Exact Google Finance Beta DOM structure. Tests that NativeTableStrategy and AriaGridStrategy
+  both return null (correct), and documents the baseline for future HeuristicDivStrategy work.</p>
+
+  <!-- Exact Google Finance Beta DOM replica -->
+  <div class="CClBMb" id="gf-grid">
+    <div class="q5BFQ">
+      <div class="KxsRFb"><div class="SwQK7">Open</div><div class="dO6ijd">$266.09</div></div>
+      <div class="KxsRFb"><div class="SwQK7">High</div><div class="dO6ijd">$268.36</div></div>
+      <div class="KxsRFb"><div class="SwQK7">Low</div><div class="dO6ijd">$265.07</div></div>
+      <div class="KxsRFb"><div class="SwQK7">Mkt. cap</div><div class="dO6ijd">3.91tn</div></div>
+      <div class="KxsRFb"><div class="SwQK7">Avg. vol.</div><div class="dO6ijd">41.34m</div></div>
+      <div class="KxsRFb"><div class="SwQK7">Volume</div><div class="dO6ijd">22.11m</div></div>
+    </div>
+    <div class="q5BFQ">
+      <div class="KxsRFb"><div class="SwQK7">Dividend</div><div class="dO6ijd">0.39%</div></div>
+      <div class="KxsRFb"><div class="SwQK7">Quarterly dividend</div><div class="dO6ijd">$0.26</div></div>
+      <div class="KxsRFb"><div class="SwQK7">Ex dividend date</div><div class="dO6ijd">9 Feb 2026</div></div>
+      <div class="KxsRFb"><div class="SwQK7">P/E ratio</div><div class="dO6ijd">33.70</div></div>
+      <div class="KxsRFb"><div class="SwQK7">52-wk high</div><div class="dO6ijd">$288.61</div></div>
+      <div class="KxsRFb"><div class="SwQK7">52-wk low</div><div class="dO6ijd">$193.25</div></div>
+    </div>
+    <div class="q5BFQ">
+      <div class="KxsRFb"><div class="SwQK7">EPS</div><div class="dO6ijd">$7.90</div></div>
+      <div class="KxsRFb"><div class="SwQK7">Beta</div><div class="dO6ijd">1.11</div></div>
+      <div class="KxsRFb"><div class="SwQK7">Shares outstanding</div><div class="dO6ijd">14.68bn</div></div>
+      <div class="KxsRFb"><div class="SwQK7">No. of employees</div><div class="dO6ijd">166k</div></div>
+    </div>
+  </div>
+
+  <!-- Test 1: DOM inventory -->
+  <div class="test-block">
+    <h2>Test 1 — DOM inventory</h2>
+    <p class="info">Confirms: no native &lt;table&gt; elements, no ARIA role roots. Only .KxsRFb items.</p>
+    <button onclick="runTest1()">Run Test</button>
+    <div class="result" id="result1">Not run yet.</div>
+  </div>
+
+  <!-- Test 2: GridDetector returns null -->
+  <div class="test-block">
+    <h2>Test 2 — GridDetector.extract() returns null</h2>
+    <p class="info">Expected: null — NativeTable and ARIA strategies both skip; Heuristic is a placeholder.
+    This is the correct baseline result until HeuristicDivStrategy is implemented.</p>
+    <button onclick="runTest2()">Run Test</button>
+    <div class="result" id="result2">Not run yet.</div>
+  </div>
+
+  <!-- Test 3: Manual selection clipboard simulation -->
+  <div class="test-block">
+    <h2>Test 3 — Clipboard plain-text simulation</h2>
+    <p class="info">Simulates what the browser puts in text/plain when selecting across .KxsRFb divs.
+    Shows the flat concatenated string that HeuristicDivStrategy will eventually need to reconstruct.</p>
+    <button onclick="runTest3()">Run Test</button>
+    <div class="result" id="result3">Not run yet.</div>
+  </div>
+
+  <!-- Test 4: Structural fingerprint (for future heuristic) -->
+  <div class="test-block">
+    <h2>Test 4 — Structural fingerprint</h2>
+    <p class="info">Documents the DOM signals a future HeuristicDivStrategy would use to detect this grid:
+    repeating sibling class, consistent child count, display:flex parent, short text nodes.</p>
+    <button onclick="runTest4()">Run Test</button>
+    <div class="result" id="result4">Not run yet.</div>
+  </div>
+
+  <script src="../grid-detector.js"></script>
+  <script>
+    function selectNodes(startEl, endEl) {
+      const range = document.createRange();
+      range.setStartBefore(startEl);
+      range.setEndAfter(endEl);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return sel;
+    }
+
+    function runTest1() {
+      const el = document.getElementById('result1');
+      const nativeTables = document.querySelectorAll('table').length;
+      const ariaRoots    = document.querySelectorAll('[role="table"],[role="grid"],[role="treegrid"]').length;
+      const ariaRows     = document.querySelectorAll('[role="row"]').length;
+      const kxsItems     = document.querySelectorAll('.KxsRFb').length;
+      const cols         = document.querySelectorAll('.q5BFQ').length;
+
+      const pass = nativeTables === 0 && ariaRoots === 0 && kxsItems > 0;
+      el.className = 'result ' + (pass ? 'pass' : 'fail');
+      el.textContent = [
+        `Native <table> elements : ${nativeTables}  (expected 0)`,
+        `ARIA grid/table roots   : ${ariaRoots}   (expected 0)`,
+        `ARIA [role="row"]       : ${ariaRows}    (expected 0)`,
+        `.KxsRFb items           : ${kxsItems}   (expected 16)`,
+        `.q5BFQ columns          : ${cols}       (expected 3)`,
+        ``,
+        `status: ${pass ? '✅ PASS — DOM is a pure div grid, no semantic hooks' : '❌ FAIL'}`
+      ].join('\n');
+    }
+
+    function runTest2() {
+      const el = document.getElementById('result2');
+      const items = document.querySelectorAll('.KxsRFb');
+      if (items.length < 4) {
+        el.textContent = 'Could not find .KxsRFb items.';
+        el.className = 'result fail';
+        return;
+      }
+      const sel = selectNodes(items[1], items[3]);
+      const result = GridDetector.extract(sel);
+      const pass = result === null;
+      el.className = 'result ' + (pass ? 'pass' : 'fail');
+      el.textContent = [
+        `GridDetector.extract() returned: ${JSON.stringify(result)}`,
+        ``,
+        `status: ${pass
+          ? '✅ PASS — correctly returns null; HeuristicDivStrategy is not yet implemented'
+          : '❌ FAIL — unexpected result returned'}`
+      ].join('\n');
+    }
+
+    function runTest3() {
+      const el = document.getElementById('result3');
+      const items = document.querySelectorAll('.KxsRFb');
+      if (items.length < 8) {
+        el.textContent = 'Could not find enough .KxsRFb items.';
+        el.className = 'result fail';
+        return;
+      }
+      // Select from item 2 (High) to item 7 (Quarterly dividend)
+      const sel = selectNodes(items[2], items[7]);
+      const flat = sel.toString();
+      el.className = 'result neutral';
+      el.textContent = [
+        `Selection.toString() (browser Z-pattern flat text):`,
+        JSON.stringify(flat),
+        ``,
+        `Characteristics:`,
+        `  - Has tabs?      ${/\t/.test(flat)}   (TSV detector will NOT fire)`,
+        `  - Has newlines?  ${/\n/.test(flat)}`,
+        `  - Length:        ${flat.length} chars`,
+        `  - Alternates:    labels and values run together with no delimiter`,
+        ``,
+        `⚠  This is the input HeuristicDivStrategy must reconstruct into a grid.`
+      ].join('\n');
+    }
+
+    function runTest4() {
+      const el = document.getElementById('result4');
+      const items  = document.querySelectorAll('.KxsRFb');
+      const parent = items[0]?.parentElement; // .q5BFQ
+
+      const parentStyle  = parent ? getComputedStyle(parent) : null;
+      const gparentStyle = parent?.parentElement ? getComputedStyle(parent.parentElement) : null;
+
+      const childCounts = Array.from(document.querySelectorAll('.KxsRFb'))
+            .map(el => el.children.length);
+      const uniformChildCount = new Set(childCounts).size === 1 ? childCounts[0] : 'varies';
+
+      const textLengths = Array.from(document.querySelectorAll('.dO6ijd'))
+            .map(el => el.textContent.trim().length);
+      const avgValueLen = (textLengths.reduce((a,b)=>a+b,0)/textLengths.length).toFixed(1);
+
+      el.className = 'result neutral';
+      el.textContent = [
+        `--- Signals for HeuristicDivStrategy ---`,
+        ``,
+        `Repeating sibling class (.KxsRFb):  ${items.length} items`,
+        `Uniform child count per item:        ${uniformChildCount} children (label + value)`,
+        ``,
+        `Column container (.q5BFQ) style:`,
+        `  display:         ${parentStyle?.display}`,
+        `  flex-direction:  ${parentStyle?.flexDirection}`,
+        ``,
+        `Grid root (.CClBMb) style:`,
+        `  display:         ${gparentStyle?.display}`,
+        ``,
+        `Value text avg length:  ${avgValueLen} chars  (short → likely data, not prose)`,
+        ``,
+        `→ Detection rule: parent.display=flex + sibling.className uniform`,
+        `    + children.length constant + value text short`
+      ].join('\n');
+    }
+  </script>
+</body>
+</html>
