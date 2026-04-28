@@ -125,13 +125,15 @@
 
     function runTest2() {
       // Start: row 0 (thead), col 1. End: tbody row 2, col 2.
-      // Bounding box: cols 1–2, rows thead+0+1+2 → depends on intersectsNode on thead
       const startCell = table.tHead.rows[0].cells[1];
       const endCell   = table.tBodies[0].rows[2].cells[2];
       const sel = selectRange(startCell, endCell);
       const result = GridDetector.extract(sel);
-      // 4 rows (1 thead + 3 tbody), 2 cols (1 and 2 = cols 1–2 → width 2)
-      renderResult('result2', result, { type: 'native', rows: 4, cols: 2 });
+      // Full intermediate rows (Toronto, Montreal) fall entirely within the range,
+      // so all their cells intersect — expanding the bounding box to cols 0–4.
+      // Empty <td>s are placed for cells outside the actual selection.
+      // Expected: 4 rows (thead + 3 tbody), 5 cols (full bounding box).
+      renderResult('result2', result, { type: 'native', rows: 4, cols: 5 });
     }
 
     function runTest3() {
