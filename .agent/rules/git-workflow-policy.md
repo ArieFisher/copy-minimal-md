@@ -2,20 +2,24 @@
 trigger: always_on
 ---
 
-1. Only make changes to feature branches. 
+# Git Workflow
 
-2. If no feature branch exists, create one before editing any files.
+1. **Only make changes on feature branches.** Never edit files directly on `main`.
 
-3. Before creating a feature branch, always run the following to (a) resync from the remote main before starting work, and, (b) remove references to remote branches that have been merged and deleted.
+2. **If no feature branch exists, create one before editing any files.**
+
+3. **Before creating a feature branch, refresh `main` and prune stale local branches.**
+   Requires a clean working tree — commit or stash any in-progress work first; this
+   workflow refuses to touch `main` with a dirty index.
 
    ```bash
    git checkout main
-   git pull origin main
-   git fetch --prune
-   ```
+   git pull --prune --ff-only origin main
 
-4. Before creating a new feature branch, delete any local branches that no longer exist on remote:
-   ```bash
-git fetch --prune
-git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -d
-   ```
+   # Delete local branches whose upstream was removed on origin.
+   # -D (force) is used because GitHub's squash-merge leaves branches looking
+   # "unmerged" locally even though their PR shipped; the ": gone]" marker
+   # is the trustworthy signal they're done.
+   git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads/ \
+     | awk '$2 == "[gone]" {print $1}' \
+     | xargs -r git branch -D

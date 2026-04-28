@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<body>
+<table id="mytable" border="1">
+  <tr><th>C1</th><th>C2</th><th>C3</th><th>C4</th><th>C5</th></tr>
+  <tr><td>R1C1</td><td id="start">R1C2</td><td>R1C3</td><td>R1C4</td><td>R1C5</td></tr>
+  <tr><td>R2C1</td><td>R2C2</td><td>R2C3</td><td>R2C4</td><td>R2C5</td></tr>
+  <tr><td>R3C1</td><td>R3C2</td><td id="end">R3C3</td><td>R3C4</td><td>R3C5</td></tr>
+  <tr><td>R4C1</td><td>R4C2</td><td>R4C3</td><td>R4C4</td><td>R4C5</td></tr>
+</table>
+<script>
+  function getSelectedTablesStructured() {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return [];
+    const range = sel.getRangeAt(0);
+
+    // Find all tables that intersect the range
+    const allTables = document.querySelectorAll('table');
+    const intersectingTables = [];
+    allTables.forEach(t => {
+      if (sel.containsNode(t, true)) intersectingTables.push(t);
+    });
+
+    return intersectingTables.map(table => {
+      let minRow = Infinity, maxRow = -1;
+      let minCol = Infinity, maxCol = -1;
+
+      // To handle colspans/rowspans, a more complex grid is needed, 
+      // but for simple tables we can just iterate rows and cells.
+      const grid = [];
+
+      for (let r = 0; r < table.rows.length; r++) {
+        const row = table.rows[r];
+        for (let c = 0; c < row.cells.length; c++) {
+          const cell = row.cells[c];
+          if (sel.containsNode(cell, true)) {
+            if (r < minRow) minRow = r;
+            if (r > maxRow) maxRow = r;
+            if (c < minCol) minCol = c;
+            if (c > maxCol) maxCol = c;
+          }
+        }
+      }
+
+      if (minRow === Infinity) return null; // No cells selected in this table
+
+      // Build structured table HTML
+      const newTable = document.createElement('table');
+      for (let r = minRow; r <= maxRow; r++) {
+        const newRow = document.createElement('tr');
+        const row = table.rows[r];
+        if (!row) continue;
+        
+        for (let c = minCol; c <= maxCol; c++) {
+          const newCell = document.createElement('td'); // Or th
+          const cell = row.cells[c];
+          if (cell && sel.containsNode(cell, true)) {
+            newCell.innerHTML = cell.innerHTML;
+          }
+          newRow.appendChild(newCell);
+        }
+        newTable.appendChild(newRow);
+      }
+      return newTable.outerHTML;
+    }).filter(t => t);
+  }
+
+  const range = document.createRange();
+  range.setStartBefore(document.getElementById('start'));
+  range.setEndAfter(document.getElementById('end'));
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  console.log(getSelectedTablesStructured());
+</script>
+</body>
+</html>

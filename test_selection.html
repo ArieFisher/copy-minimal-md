@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<body>
+<table id="mytable" border="1">
+  <tr><th>C1</th><th>C2</th><th>C3</th><th>C4</th><th>C5</th></tr>
+  <tr><td>R1C1</td><td id="start">R1C2</td><td>R1C3</td><td>R1C4</td><td>R1C5</td></tr>
+  <tr><td>R2C1</td><td>R2C2</td><td>R2C3</td><td>R2C4</td><td>R2C5</td></tr>
+  <tr><td>R3C1</td><td>R3C2</td><td id="end">R3C3</td><td>R3C4</td><td>R3C5</td></tr>
+  <tr><td>R4C1</td><td>R4C2</td><td>R4C3</td><td>R4C4</td><td>R4C5</td></tr>
+</table>
+<script>
+  // select from start to end
+  const range = document.createRange();
+  range.setStartBefore(document.getElementById('start'));
+  range.setEndAfter(document.getElementById('end'));
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  
+  // copy event listener to see what browser puts in clipboard
+  document.addEventListener('copy', (e) => {
+    // we won't intercept here in JS, but we want to know what the browser's default HTML is.
+  });
+</script>
+</body>
+</html>
