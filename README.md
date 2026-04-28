@@ -21,8 +21,6 @@ Converts copied web content to Markdown—preserving structure (tables, headers,
 RevenueImpressions1512721403113913970292114095101792637693774201147111
 ```
 
-There are other problems this addresses, (e.g. pasting into Google Docs perserves *too much* formatting) but 'tables back-and-forth to LLMs' was the genesis.
-
 ## The Solution: a new 'copy' function
 
 This one desiged for portability: it copies *text* and *structure* -- in a way that LLMs natively understand.
@@ -30,15 +28,17 @@ This one desiged for portability: it copies *text* and *structure* -- in a way t
 Which format?  JSON preserves text and structure while shedding formatting.  So does XML. 
 
 ### Markdown
-While LLMs can interpret this format, there is a lighter weight choice that is natively understood by more of the tools that I use.  When Markdown is pasted into many tools, it will render as an actual table (vs. a blog of code or XML): tools like Google Docs, Notion, Obsidian, python editors (e.g. Notebooks), Confluence, Jira, GitHub, and a host of others. 
+While LLMs can interpret this format, there is a lighter weight choice that is natively understood by more and more tools.  When a Markdown table is pasted into many tools, it will render as an actual table (not true for JSON or XML): tools like Google Docs, Notion, Obsidian, python / jupyter notebooks, Confluence, Jira, GitHub, and a host of others.
 
-So the solution is a new **copy function** that copies the selection and then converts the clipboard contents into **Markdown**.
+The solution is a new **copy function** that copies the selection and then converts the clipboard contents into **Markdown**.
 
 It is desiged for data 'portability':
-* copying tables to and from spreadsheets and LLMs
-* copying regular text between 'websites' (traditional websites, SaaS tools like Google Docs, LLM output....):
 
-That second use case means avoiding the tedious:
+(1) copying tables between spreadsheets and LLMs
+
+(2) copying regular text between 'websites' (traditional websites, SaaS tools, LLM chatbots ....):
+
+This second way helps avoid a tedious dance that you may have experience with:
 
  * copy from the web/LLM/....
  * paste into a Google Doc
@@ -50,26 +50,25 @@ That second use case means avoiding the tedious:
 
 Instead:
 
- * copy2MD from the web/LLM/....
- * 'Paste from Markdown' into a Google Doc
+ * copy-minimal-md ....
+ * 'Paste from Markdown' into a Google Doc (or regular paste into many other tools)
 
 
-## Why this tool?
+## Why have I developed this tool?
 
-**Learning:** I did this to experiment with Agentic Development applied to a (minor) irritant.
+**Learning:** To experiment with Agentic Development applied to a (minor) irritant.
 
-**Security:** There are many available Chrome extensions, but I try to avoid installing tools from unknown sources.
+**Security:** I try to avoid installing Chrome Extensions and software from unknown authors.
 
-**Unique use case:** Some alternatives (like [Markdownload](https://github.com/deathau/markdownload)) or the very cool [Jina.ai](https://jina.ai/reader/) extract full pages and save them as files. I wanted a very simple clipboard utility.
+**Unique use case:** Some alternatives (like [Markdownload](https://github.com/deathau/markdownload)) or the very cool [Jina.ai](https://jina.ai/reader/) extract full pages and save them as files. I wanted to use/create a very simple clipboard utility.  note: simplicity is not synonymous with 'easy'.
 
-**What should you do:** There are many mature, well-maintained, more feature-rich tools; use what feels good to you.
+**Should you use this tool?** There are many mature, well-maintained, more feature-rich tools; use what feels good to you.
 
 ## Features
-
-*   **Clipboard integration**: Automatically updates your clipboard with clean Markdown
-*   **Local processing**: No data sent to an external service
 *   **Strips inline styles**: Removes font families, colors, and background highlights
 *   **Preserves structure**: Headings, bold, italics, links, lists, and tables
+*   **Clipboard integration**: Automatically updates your clipboard with clean Markdown
+*   **Local processing**: No data sent to an external service
 
 ## Usage
 
@@ -77,7 +76,7 @@ Instead:
 2.  Press the keyboard shortcut:
     *   **Mac**: `Cmd + Shift + U`
     *   **Windows/Linux**: `Ctrl + Shift + U`
-3.  **Paste** (`Cmd+V` / `Ctrl+V`) — now clean Markdown
+3.  **Paste** (`Cmd+V` / `Ctrl+V`) — pastes clean Markdown
 
 ## How It Works
 
@@ -114,6 +113,6 @@ Install as an unpacked extension:
 
 ### "Copy Failed: Clipboard content mismatch"
 
-**issue:** When the clipboard contents doesn't match current selection, it won't run and destroy whatever you have in the clipboard.
+**issue:** When the clipboard contents doesn't match current selection, it won't run (and risk overwriting whatever you already had in the clipboard.)
 **fix:**  manually copy (`Cmd+C` / `Ctrl+C`) first, then run the shortcut.  
 **fix:**  manually copy (`Cmd+C` / `Ctrl+C`) first.  Then deselect text and press `Cmd + Shift + U`.  This will convert *what is already inside the clipboard*.
