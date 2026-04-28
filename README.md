@@ -80,24 +80,33 @@ Instead:
 
 ## How It Works
 
-1.  Background script listens for the command (`run-markdown-clean`)
-2.  Programmatically triggers 'copy' (`document.execCommand('copy')`) to simulate a native user copy (`Cmd+C`). 
-    *   *Why use a deprecated API?* Modern APIs (`navigator.clipboard.writeText`) require explicit string data and bypass the browser's native copy logic. Using `execCommand` forces the browser—and complex host apps like Google Docs, Notion, or code editors—to fire their custom event listeners. This is the only reliable way to guarantee they serialize their complex internal state into the rich HTML format, allowing the script to grab the exact same clipboard data a real user would get.
-3.  Converts HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown), discarding style attributes
-4.  Writes clean Markdown back to clipboard
-5.  **TSV Fallback**: If no HTML is present, but the plain text looks like Tab-Separated Values (TSV), it converts the TSV data directly into a Markdown table structure. This is especially useful for modern data grids (like Databricks) that intercept copy events and provide only raw TSV text.
-6.  **Plain Text Fallback**: If no HTML or TSV is present, it re-writes plain text to scrub hidden metadata (e.g., RTF or vendor tags).
+1.  **Selection Capture**: The script captures the user's current selection and immediately analyzes the DOM for structured data (tables/grids).
+2.  **Grid Detection (Strategy Pattern)**: Before the copy occurs, the `GridDetector` evaluates the selection against three strategies:
+    *   **Native Table**: Detects standard `<table>` structures. It calculates a "bounding box" of the selection and reconstructs a perfect grid in memory, padding unselected cells with empty spaces to maintain alignment.
+    *   **ARIA Grid**: Detects modern data grids (divs/spans with `role="grid"`). It extracts the data and transforms it into a standard HTML `<table>` for the Markdown converter.
+    *   **Heuristic Div (Planned)**: Fingerprints custom `display: flex/grid` containers that lack semantic markers.
+3.  **Native Copy Execution**: Triggers `document.execCommand('copy')` to simulate a `Cmd+C`. 
+    *   *Why?* This is the only way to force complex apps (Google Docs, Notion, Confluence) to fire their custom serializers and provide the rich HTML payload we need.
+4.  **Clipboard Repair & Synthesis**:
+    *   **Repair**: If a native table was selected, the script replaces the browser's "jagged" clipboard HTML with the reconstructed "perfect" table from step 2.
+    *   **Synthesis**: If an ARIA grid was detected but the browser provided no HTML payload, the script synthesizes a table directly from the DOM extraction.
+5.  **Markdown Conversion**: Converts the final sanitized HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown).
+6.  **TSV Fallback**: If no HTML is present but the plain text looks like Tab-Separated Values (TSV), it converts the TSV data directly into a Markdown table.
+7.  **Clipboard Update**: Writes the final clean Markdown back to the clipboard.
 
 ## Dependencies
 
+Third-party libraries are located in the `lib/` directory:
 *   [Turndown](https://github.com/mixmark-io/turndown) — HTML to Markdown converter
 *   [Turndown Plugin GFM](https://github.com/mixmark-io/turndown-plugin-gfm) — Tables and strikethrough support
+*   [DOMPurify](https://github.com/cure53/dompurify) — Robust XSS sanitization for HTML payloads
+*   [Marked](https://github.com/markedjs/marked) — Markdown parser (used for rendering previews in the Inspector)
 
 ## Chrome Extension Permissions
 
-*   `activeTab`: Execute script on current page
-*   `scripting`: Inject library files
-*   `clipboardRead` / `clipboardWrite`: Modify clipboard content
+*   `activeTab`: Execute the script on the currently active tab.
+*   `scripting`: Inject content scripts and library files into the page.
+*   `clipboardRead` / `clipboardWrite`: Intercept and modify clipboard content for cleaning.
 
 ## Installation
 
