@@ -21,171 +21,11 @@ if (!window.__tsvCleanerListenerRegistered) {
         const selection = window.getSelection();
         const selectedText = selection ? selection.toString().trim() : "";
 
-        // 1.5. Build structured tables for partial selections from DOM BEFORE copying
-        let structuredDomTables = [];
-        if (selection && selection.rangeCount > 0) {
-            const allTables = document.querySelectorAll('table');
-            const intersectingTables = [];
-            for (let i = 0; i < selection.rangeCount; i++) {
-                const range = selection.getRangeAt(i);
-                allTables.forEach(t => {
-                    if (range.intersectsNode(t) && !intersectingTables.includes(t)) {
-                        intersectingTables.push(t);
-                    }
-                });
-            }
-
-            structuredDomTables = intersectingTables.map(table => {
-                let minRow = Infinity, maxRow = -1;
-                let minCol = Infinity, maxCol = -1;
-
-                // Find bounding box
-                for (let r = 0; r < table.rows.length; r++) {
-                    const row = table.rows[r];
-                    for (let c = 0; c < row.cells.length; c++) {
-                        const cell = row.cells[c];
-                        let isSelected = false;
-                        for (let i = 0; i < selection.rangeCount; i++) {
-                            if (selection.getRangeAt(i).intersectsNode(cell)) {
-                                isSelected = true;
-                                break;
-                            }
-                        }
-                        if (isSelected) {
-                            if (r < minRow) minRow = r;
-                            if (r > maxRow) maxRow = r;
-                            if (c < minCol) minCol = c;
-                            if (c > maxCol) maxCol = c;
-                        }
-                    }
-                }
-
-                if (minRow === Infinity) return null;
-
-                const newTable = document.createElement('table');
-                for (let r = minRow; r <= maxRow; r++) {
-                    const newRow = document.createElement('tr');
-                    const row = table.rows[r];
-                    if (!row) continue;
-                    
-                    for (let c = minCol; c <= maxCol; c++) {
-                        const cell = row.cells[c];
-                        let isSelected = false;
-                        if (cell) {
-                            for (let i = 0; i < selection.rangeCount; i++) {
-                                if (selection.getRangeAt(i).intersectsNode(cell)) {
-                                    isSelected = true;
-                                    break;
-                                }
-                            }
-                        }
-                        const newCell = document.createElement(cell && cell.tagName === 'TH' ? 'th' : 'td');
-                        if (isSelected) {
-                            newCell.innerHTML = cell.innerHTML;
-                        }
-                        newRow.appendChild(newCell);
-                    }
-                    newTable.appendChild(newRow);
-                }
-                return newTable;
-            }).filter(t => t);
-        }
-
-        // 1.6. Detect ARIA grid tables (role="table" / role="grid") BEFORE copying.
-        // Sites like Google Finance Beta render their data grids as div elements with ARIA roles
-        // instead of native <table> elements. The browser clipboard for these grids contains only
-        // flat text/plain with no HTML payload, so the native table path above produces nothing.
-        // We pre-compute a structured <table> here from the live DOM selection so we can use it
-        // as a fallback when no text/html is found in the clipboard.
-        let structuredAriaHtml = null;
-        if (selection && selection.rangeCount > 0) {
-            const allAriaTables = document.querySelectorAll('[role="table"], [role="grid"], [role="treegrid"]');
-            for (const ariaTable of allAriaTables) {
-                let tableIntersects = false;
-                for (let i = 0; i < selection.rangeCount; i++) {
-                    if (selection.getRangeAt(i).intersectsNode(ariaTable)) { tableIntersects = true; break; }
-                }
-                if (!tableIntersects) continue;
-
-                const ariaRows = ariaTable.querySelectorAll('[role="row"]');
-                let minRow = Infinity, maxRow = -1, minCol = Infinity, maxCol = -1;
-
-                for (let r = 0; r < ariaRows.length; r++) {
-                    const ariaCells = ariaRows[r].querySelectorAll('[role="cell"], [role="gridcell"], [role="columnheader"], [role="rowheader"]');
-                    for (let c = 0; c < ariaCells.length; c++) {
-                        let isSelected = false;
-                        for (let i = 0; i < selection.rangeCount; i++) {
-                            if (selection.getRangeAt(i).intersectsNode(ariaCells[c])) { isSelected = true; break; }
-                        }
-                        if (isSelected) {
-                            if (r < minRow) minRow = r;
-                            if (r > maxRow) maxRow = r;
-                            if (c < minCol) minCol = c;
-                            if (c > maxCol) maxCol = c;
-                        }
-                    }
-                }
-
-                if (minRow === Infinity) continue;
-
-                const newTable = document.createElement('table');
-                let thead = null;
-                const tbody = document.createElement('tbody');
-
-                for (let r = minRow; r <= maxRow; r++) {
-                    const ariaRow = ariaRows[r];
-                    if (!ariaRow) continue;
-                    const ariaCells = ariaRow.querySelectorAll('[role="cell"], [role="gridcell"], [role="columnheader"], [role="rowheader"]');
-                    const tr = document.createElement('tr');
-                    let isHeaderRow = false;
-
-                    for (let c = minCol; c <= maxCol; c++) {
-                        const ariaCell = ariaCells[c];
-                        let isSelected = false;
-                        if (ariaCell) {
-                            for (let i = 0; i < selection.rangeCount; i++) {
-                                if (selection.getRangeAt(i).intersectsNode(ariaCell)) { isSelected = true; break; }
-                            }
-                        }
-                        const isHeader = ariaCell && ariaCell.getAttribute('role') === 'columnheader';
-                        if (isHeader) isHeaderRow = true;
-                        const cell = document.createElement(isHeader ? 'th' : 'td');
-                        if (isSelected && ariaCell) {
-                            cell.textContent = ariaCell.textContent.trim();
-                        }
-                        tr.appendChild(cell);
-                    }
-
-                    if (isHeaderRow) {
-                        if (!thead) thead = document.createElement('thead');
-                        thead.appendChild(tr);
-                    } else {
-                        tbody.appendChild(tr);
-                    }
-                }
-
-                // Turndown GFM requires a thead to render a Markdown table.
-                // If no columnheader roles exist, promote the first data row.
-                if (!thead && tbody.firstChild) {
-                    thead = document.createElement('thead');
-                    const firstDataRow = tbody.firstChild;
-                    const headerTr = document.createElement('tr');
-                    Array.from(firstDataRow.cells).forEach(cell => {
-                        const th = document.createElement('th');
-                        th.textContent = cell.textContent;
-                        headerTr.appendChild(th);
-                    });
-                    thead.appendChild(headerTr);
-                    firstDataRow.remove();
-                }
-
-                if (thead) newTable.appendChild(thead);
-                newTable.appendChild(tbody);
-                structuredAriaHtml = newTable.outerHTML;
-                console.log(`Docs Cleaner: ARIA table extracted (rows ${minRow}-${maxRow}, cols ${minCol}-${maxCol}).`);
-                break; // use the first intersecting ARIA table
-            }
-        }
+        // 1.5. Pre-compute grid structure from the live DOM BEFORE copying.
+        // GridDetector tries native <table>, ARIA role, and heuristic div strategies in order.
+        // The result is used post-copy to either fix jagged clipboard HTML (type='native') or
+        // synthesize structured Markdown when no HTML payload exists (type='aria'/'heuristic').
+        const gridResult = GridDetector.extract(selection);
 
         // 2. Attempt programmatic copy
         // Note: document.execCommand('copy') is broadly considered deprecated, but it is strictly REQUIRED here.
@@ -235,7 +75,7 @@ if (!window.__tsvCleanerListenerRegistered) {
                 // cell of the first selected row — which may come *before* where the user's highlight
                 // started. Searching only the first 100 chars would miss the user's starting cell.
                 // Broaden the search window to the full text and lower the required match count to 1.
-                const isTableSelection = structuredDomTables.length > 0 || structuredAriaHtml !== null;
+                const isTableSelection = gridResult !== null;
                 const searchText = isTableSelection ? cleanText : cleanText.substring(0, 100);
                 const targetMatches = isTableSelection ? 1 : Math.min(3, checkWords.length);
                 const clipboardWords = searchText.split(/\s+/).filter(w => w.length > 0);
@@ -284,11 +124,11 @@ if (!window.__tsvCleanerListenerRegistered) {
                 // Guard 2: column count sanity — if the clipboard table's max column count is more than 2× our
                 //   DOM table's column count it is almost certainly a different (layout) table, not the data table
                 //   the user selected. Skip replacement in that case.
-                if (tables.length > 0 && structuredDomTables.length === tables.length) {
+                if (tables.length > 0 && gridResult?.type === 'native' && gridResult.tables.length === tables.length) {
                     let structureMatch = true;
                     for (let i = 0; i < tables.length; i++) {
                         const maxClipboardCols = Math.max(...Array.from(tables[i].rows).map(r => r.cells.length));
-                        const domCols = structuredDomTables[i].rows[0]?.cells.length || 0;
+                        const domCols = gridResult.tables[i].rows[0]?.cells.length || 0;
                         if (domCols > 0 && maxClipboardCols > domCols * 2) {
                             console.warn(`Docs Cleaner: Table ${i} column mismatch (clipboard max: ${maxClipboardCols}, dom: ${domCols}). Skipping structured replacement.`);
                             structureMatch = false;
@@ -300,7 +140,7 @@ if (!window.__tsvCleanerListenerRegistered) {
                             // Explicitly adopt the node into the DOMParser document before inserting.
                             // cloneNode alone creates a node owned by the live page document; adoptNode
                             // transfers ownership to doc, preventing any cross-document reference issues.
-                            tables[i].replaceWith(doc.adoptNode(structuredDomTables[i].cloneNode(true)));
+                            tables[i].replaceWith(doc.adoptNode(gridResult.tables[i].cloneNode(true)));
                         }
                         modified = true;
                     }
@@ -393,22 +233,22 @@ if (!window.__tsvCleanerListenerRegistered) {
                 // Plain Text Fallback
                 console.log("Docs Cleaner: No HTML found, using Plain Text.");
 
-                // ARIA table intercept: if we pre-computed a structured table from ARIA DOM
-                // elements, synthesize Markdown from it instead of the flat plain text.
+                // Grid table intercept: if we pre-computed a structured table from ARIA or heuristic
+                // DOM detection, synthesize Markdown from it instead of the flat plain text.
                 // This handles sites like Google Finance Beta that produce no text/html payload.
-                if (structuredAriaHtml) {
-                    console.log("Docs Cleaner: ARIA grid detected; synthesizing Markdown from DOM structure.");
-                    const cleanAriaHtml = DOMPurify.sanitize(structuredAriaHtml, {
+                if (gridResult?.type === 'aria' || gridResult?.type === 'heuristic') {
+                    console.log(`Docs Cleaner: ${gridResult.type} grid detected; synthesizing Markdown from DOM structure.`);
+                    const cleanGridHtml = DOMPurify.sanitize(gridResult.tables[0].outerHTML, {
                         ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td'],
                         ALLOWED_ATTR: [],
                         ALLOW_DATA_ATTR: false
                     });
-                    const ariaTurndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-                    ariaTurndown.use(turndownPluginGfm.gfm);
-                    const ariaMarkdown = ariaTurndown.turndown(cleanAriaHtml);
-                    await navigator.clipboard.writeText(ariaMarkdown);
-                    console.log("Docs Cleaner: ARIA Markdown written to clipboard.");
-                    flashSuccess("ARIA Table Ready!");
+                    const gridTurndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+                    gridTurndown.use(turndownPluginGfm.gfm);
+                    const gridMarkdown = gridTurndown.turndown(cleanGridHtml);
+                    await navigator.clipboard.writeText(gridMarkdown);
+                    console.log("Docs Cleaner: Grid Markdown written to clipboard.");
+                    flashSuccess("Grid Table Ready!");
                     return;
                 }
                 const plainText = await textBlob.text();

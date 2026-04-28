@@ -5,7 +5,7 @@ chrome.commands.onCommand.addListener((command) => {
             if (currentTab && currentTab.url && (currentTab.url.startsWith("http://") || currentTab.url.startsWith("https://") || currentTab.url.startsWith("file://"))) {
                 chrome.scripting.executeScript({
                     target: { tabId: currentTab.id },
-                    files: ["purify.min.js", "turndown.js", "turndown-plugin-gfm.js", "marked.min.js", "tsv-detector.js", "content.js"]
+                    files: ["purify.min.js", "turndown.js", "turndown-plugin-gfm.js", "marked.min.js", "tsv-detector.js", "grid-detector.js", "content.js"]
                 });
             } else {
                 console.log("Docs Markdown Cleaner: URL is not supported for text extraction.");
