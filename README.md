@@ -65,9 +65,10 @@ Instead:
 **Features:** It includes some clever features, like handling 'jagged' table selection.
 
 e.g. [income statement](https://en.wikipedia.org/wiki/Income_statement#:~:text=Full%20consolidated%20statement%20of%20operations), contains a table:
+
 | 2019 ($) | 2020 ($) | 2021 ($) |
-| --- | --- |
-| 36,000 | 29,000 | 21,000 |
+| --- | --- | -- |
+| 5,000 | 10,000 | 25,000 |
 
 To copy the 2020 revenue, you click into the `2020 ($)` cell and drag until you have highlighted the value, then press `copy` (`ctrl\cmd-c`).
 
@@ -75,7 +76,7 @@ The **wrong information** goes into your clipboard (try it).
 
 | 2020 ($) | 2021 ($) |
 | --- | --- |
-| 36,000 | 29,000 |
+| 5,000 | 10,000 |
 
 The clipboard stored a table where
 - row 1: B1:C1
@@ -85,7 +86,7 @@ By contrast, if you copy with this library, it takes the **selected values** in 
 
 | | 2020 ($) | 2021 ($) |
 | --- | --- | --- |
-| 36,000 | 29,000 |  |
+| 5,000 | 10,000 |  |
 
 ## Features
 *   **Strips inline styles**: Removes font families, colors, and background highlights

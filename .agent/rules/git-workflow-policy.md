@@ -23,3 +23,6 @@ trigger: always_on
    git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads/ \
      | awk '$2 == "[gone]" {print $1}' \
      | xargs -r git branch -D
+   ```
+
+4. **"Commit all changes" command.** When the USER says to 'commit all changes', first stage all unstaged changes (`git add .`) and then commit them. If on `main`, create a feature branch first to adhere to rule #1.
