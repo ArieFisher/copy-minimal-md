@@ -19,6 +19,9 @@
  *     bypassing the clipboard HTML (which is absent or unusable for these grid types).
  */
 
+(function (global) {
+    if (global.GridDetector) return;
+
 // ---------------------------------------------------------------------------
 // Shared utilities
 // ---------------------------------------------------------------------------
@@ -209,7 +212,7 @@ const HeuristicDivStrategy = {
 // Public API
 // ---------------------------------------------------------------------------
 
-const GridDetector = {
+global.GridDetector = {
     _strategies: [NativeTableStrategy, AriaGridStrategy, HeuristicDivStrategy],
 
     /**
@@ -229,3 +232,5 @@ const GridDetector = {
         return null;
     }
 };
+
+})(typeof window !== 'undefined' ? window : globalThis);

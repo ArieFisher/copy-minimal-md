@@ -62,12 +62,39 @@ Instead:
 
 **Unique use case:** Some alternatives (like [Markdownload](https://github.com/deathau/markdownload)) or the very cool [Jina.ai](https://jina.ai/reader/) extract full pages and save them as files. I wanted to use/create a very simple clipboard utility.  note: simplicity is not synonymous with 'easy'.
 
-**Should you use this tool?** There are many mature, well-maintained, more feature-rich tools; use what feels good to you.
+**Features:** It includes some clever features, like handling 'jagged' table selection.
+
+e.g. [income statement](https://en.wikipedia.org/wiki/Income_statement#:~:text=Full%20consolidated%20statement%20of%20operations), contains a table:
+| 2019 ($) | 2020 ($) | 2021 ($) |
+| --- | --- |
+| 36,000 | 29,000 | 21,000 |
+
+To copy the 2020 revenue, you click into the `2020 ($)` cell and drag until you have highlighted the value, then press `copy` (`ctrl\cmd-c`).
+
+The **wrong information** goes into your clipboard (try it).
+
+| 2020 ($) | 2021 ($) |
+| --- | --- |
+| 36,000 | 29,000 |
+
+The clipboard stored a table where
+- row 1: B1:C1
+- row 2: A2:B2 -- two *different* columns.  The value under '`2020 ($)`' is the 2019 value (!)
+
+By contrast, if you copy with this library, it takes the **selected values** in the **original structure**:
+
+| | 2020 ($) | 2021 ($) |
+| --- | --- | --- |
+| 36,000 | 29,000 |  |
 
 ## Features
 *   **Strips inline styles**: Removes font families, colors, and background highlights
 *   **Preserves structure**: Headings, bold, italics, links, lists, and tables
-*   **Clipboard integration**: Automatically updates your clipboard with clean Markdown
+*   **Clipboard integration**: Automatically updates the clipboard with clean Markdown
+*   **Jagged tables**: Copies selected values in the correct structure
+*   **ARIA tables**: Many sites no longer use traditional HTML `<table>` tags, but instead construct what looks like tables out of sophisticated HTML.
+*   **TSV tables**: When users copy a table, many websites will only give the clipboard tab-separated values. This library converts those into traditional tables for easier pasting.
+*   **Clipboard Inspector**: Want to see what's actually in your clipboard? Press `Ctrl`/`Cmd + Shift + O` to inspect clipboard contents.
 *   **Local processing**: No data sent to an external service
 
 ## Usage

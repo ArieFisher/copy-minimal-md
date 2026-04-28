@@ -699,11 +699,16 @@ TsvDetector.addListener(async (d) => {
     ]);
 });
 
-// Execute when DOM is fully loaded
+// Execute when DOM is fully loaded.
+// The Async Clipboard API requires document focus. Fire immediately if we already
+// have it (e.g. the tab was opened in the foreground), otherwise wait for the
+// first focus event — no arbitrary timer needed.
 document.addEventListener('DOMContentLoaded', () => {
-    // Add a small delay to ensure the new tab has fully gained focus before requesting clipboard.
-    // The Async Clipboard API will throw "Document is not focused" if we read too quickly.
-    setTimeout(readClipboard, 100);
+    if (document.hasFocus()) {
+        readClipboard();
+    } else {
+        window.addEventListener('focus', readClipboard, { once: true });
+    }
 });
 
 // Close the tab when the user leaves it
