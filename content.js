@@ -58,7 +58,33 @@ if (!window.__tsvCleanerListenerRegistered) {
         // their specific internal data structures into standard clipboard HTML, which we then read and process.
         // (Also note: Google Docs sometimes blocks this when initiated by a background script)
 
+        // If Databricks grid is selected (via its custom CSS classes) but the native selection
+        // is outside (e.g. in the SQL editor), Databricks' copy handler will ignore execCommand('copy')
+        // and the browser will copy the SQL editor. We must temporarily move the native selection
+        // into the grid to trick Databricks into firing its TSV copy logic.
+        let originalRange = null;
+        if (selection && selection.rangeCount > 0) {
+            originalRange = selection.getRangeAt(0);
+        }
+        
+        const databricksCell = document.querySelector('.dg--selected-cell');
+        let tempSelectionAdded = false;
+        if (databricksCell && (!selection || !selection.anchorNode || !(databricksCell.closest('.dg--table-wrapper') || databricksCell.closest('[role="table"]'))?.contains(selection.anchorNode))) {
+            const tempRange = document.createRange();
+            tempRange.selectNodeContents(databricksCell);
+            selection.removeAllRanges();
+            selection.addRange(tempRange);
+            tempSelectionAdded = true;
+            console.log("Docs Cleaner: Temporarily moved native selection to Databricks grid to trigger native copy.");
+        }
+
         const success = document.execCommand('copy');
+
+        // Restore original selection
+        if (tempSelectionAdded && originalRange) {
+            selection.removeAllRanges();
+            selection.addRange(originalRange);
+        }
 
         console.log("Docs Cleaner: execCommand('copy') result:", success);
 
@@ -89,8 +115,9 @@ if (!window.__tsvCleanerListenerRegistered) {
 
             // 4. Verification: Check for stale clipboard
             // If the clipboard text doesn't contain a significant chunk of our selection, 
-            // the copy probably failed silently.
-            if (selectedText && cleanText) {
+            // the copy probably failed silently. Skip this check if we used the Databricks
+            // fallback selection, since the TSV payload won't match the faked selection text.
+            if (selectedText && cleanText && !tempSelectionAdded) {
                 // Use a word-intersection check to avoid issues with formatting/whitespace diffs from grid/flexbox layouts.
                 const checkWords = selectedText.substring(0, 50).split(/\s+/).filter(w => w.length > 0);
 

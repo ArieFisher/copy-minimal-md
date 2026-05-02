@@ -121,6 +121,7 @@
         canHandle(selection) {
             const roots = document.querySelectorAll('[role="table"], [role="grid"], [role="treegrid"]');
             for (const t of roots) {
+                if (t.classList.contains('dg--table-wrapper') || t.classList.contains('dg--grid-container')) continue;
                 if (_intersectsSelection(t, selection)) return true;
             }
             return false;
@@ -131,6 +132,7 @@
             const roots = document.querySelectorAll('[role="table"], [role="grid"], [role="treegrid"]');
 
             for (const root of roots) {
+                if (root.classList.contains('dg--table-wrapper') || root.classList.contains('dg--grid-container')) continue;
                 if (!_intersectsSelection(root, selection)) continue;
 
                 const ariaRows = root.querySelectorAll('[role="row"]');
