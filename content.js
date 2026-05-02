@@ -32,6 +32,9 @@ if (!window.__tsvCleanerListenerRegistered) {
         // so AriaGridStrategy never fires. Worse, execCommand('copy') triggers the site's
         // own copy handler which writes SQL or other unexpected content instead of TSV.
         // Bypass execCommand entirely and synthesise Markdown straight from the DOM table.
+        // Note: the stale-clipboard check (step 4) is intentionally skipped here — this
+        // path extracts data from the live DOM, not the clipboard, so clipboard freshness
+        // is irrelevant.
         if (gridResult?.type === 'orphan-aria') {
             const cleanGridHtml = DOMPurify.sanitize(gridResult.tables[0].outerHTML, {
                 ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td'],

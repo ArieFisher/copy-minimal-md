@@ -27,11 +27,30 @@
     // ---------------------------------------------------------------------------
 
     /**
-     * Returns true if `node` intersects any range in `selection`.
+     * Pre-extracts the ranges from `selection` into a plain array.
+     * Call once per trigger, then pass the result to _intersectsRanges.
+     * Avoids repeated getRangeAt() allocations inside per-node hot loops.
+     */
+    function _extractRanges(selection) {
+        const ranges = [];
+        for (let i = 0; i < selection.rangeCount; i++) ranges.push(selection.getRangeAt(i));
+        return ranges;
+    }
+
+    /**
+     * Returns true if `node` intersects any of the pre-extracted ranges.
      */
     function _intersectsSelection(node, selection) {
         for (let i = 0; i < selection.rangeCount; i++) {
             if (selection.getRangeAt(i).intersectsNode(node)) return true;
+        }
+        return false;
+    }
+
+    /** Variant that accepts a pre-built ranges array (see _extractRanges). */
+    function _intersectsRanges(node, ranges) {
+        for (const range of ranges) {
+            if (range.intersectsNode(node)) return true;
         }
         return false;
     }
@@ -201,22 +220,28 @@
     const OrphanAriaRowStrategy = {
         _CELL_SEL: '[role="cell"], [role="gridcell"], [role="columnheader"], [role="rowheader"]',
         _GRID_SEL: '[role="grid"], [role="table"], [role="treegrid"]',
+        _cachedOrphanRows: null,
 
         _orphanRows() {
-            return Array.from(document.querySelectorAll('[role="row"]')).filter(row =>
+            if (this._cachedOrphanRows) return this._cachedOrphanRows;
+            this._cachedOrphanRows = Array.from(document.querySelectorAll('[role="row"]')).filter(row =>
                 !row.closest(this._GRID_SEL) && !!row.querySelector(this._CELL_SEL)
             );
+            return this._cachedOrphanRows;
         },
 
         canHandle(selection) {
+            // Cache is populated here and reused by extract(); cleared at end of extract().
             for (const row of this._orphanRows()) {
                 if (_intersectsSelection(row, selection)) return true;
             }
+            this._cachedOrphanRows = null; // canHandle returned false — clear cache
             return false;
         },
 
         extract(selection) {
-            const allOrphanRows = this._orphanRows();
+            const allOrphanRows = this._orphanRows(); // reuses cache from canHandle
+            try {
             if (allOrphanRows.length === 0) return null;
 
             const selectedRows = allOrphanRows.filter(row => _intersectsSelection(row, selection));
@@ -242,9 +267,11 @@
                 return null;
             }
 
+            // Use a Set for O(1) membership checks instead of O(n) Array.includes().
+            const selectedRowSet = new Set(selectedRows);
             const headerRows = Array.from(gridContainer.querySelectorAll('[role="row"]')).filter(row =>
                 row.querySelector('[role="columnheader"]') &&
-                !selectedRows.includes(row) &&
+                !selectedRowSet.has(row) &&
                 !row.closest(this._GRID_SEL)
             );
 
@@ -298,6 +325,9 @@
 
             console.log(`GridDetector [orphan-aria]: ${selectedRows.length} data rows, ${headerRows.length} header rows, ${colCount} cols`);
             return { type: 'orphan-aria', tables: [newTable] };
+            } finally {
+                this._cachedOrphanRows = null; // always clear cache, even on error
+            }
         }
     };
 
