@@ -27,6 +27,26 @@ if (!window.__tsvCleanerListenerRegistered) {
         // synthesize structured Markdown when no HTML payload exists (type='aria'/'heuristic').
         const gridResult = GridDetector.extract(selection);
 
+        // 1.6. Orphan-ARIA grid fast path (e.g. Databricks virtualised data grids).
+        // These grids emit role="row"/"cell"/"columnheader" but omit a role="grid" root,
+        // so AriaGridStrategy never fires. Worse, execCommand('copy') triggers the site's
+        // own copy handler which writes SQL or other unexpected content instead of TSV.
+        // Bypass execCommand entirely and synthesise Markdown straight from the DOM table.
+        if (gridResult?.type === 'orphan-aria') {
+            const cleanGridHtml = DOMPurify.sanitize(gridResult.tables[0].outerHTML, {
+                ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                ALLOWED_ATTR: [],
+                ALLOW_DATA_ATTR: false
+            });
+            const gridTurndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+            gridTurndown.use(turndownPluginGfm.gfm);
+            const gridMarkdown = gridTurndown.turndown(cleanGridHtml);
+            await navigator.clipboard.writeText(gridMarkdown);
+            console.log("Docs Cleaner: Orphan-ARIA Grid Markdown written to clipboard.");
+            flashSuccess("Grid Table Ready!");
+            return;
+        }
+
         // 2. Attempt programmatic copy
         // Note: document.execCommand('copy') is broadly considered deprecated, but it is strictly REQUIRED here.
         // It tells the browser to simulate a 'Cmd+C' keystroke, guaranteeing we get the exact same
@@ -34,9 +54,9 @@ if (!window.__tsvCleanerListenerRegistered) {
         // Google Docs, Notion, or Confluence to fire their custom copy event listeners and format 
         // their specific internal data structures into standard clipboard HTML, which we then read and process.
         // (Also note: Google Docs sometimes blocks this when initiated by a background script)
-        
-        const success = document.execCommand('copy'); 
-        
+
+        const success = document.execCommand('copy');
+
         console.log("Docs Cleaner: execCommand('copy') result:", success);
 
         // Wait for clipboard I/O to settle (race condition fix)
@@ -98,10 +118,32 @@ if (!window.__tsvCleanerListenerRegistered) {
 
 
 
+            let htmlText = null;
+            let doc = null;
+            let tables = [];
+
+            if (htmlBlob) {
+                htmlText = await htmlBlob.text();
+                const parser = new DOMParser();
+                doc = parser.parseFromString(htmlText, 'text/html');
+                tables = doc.querySelectorAll('table');
+
+                // Heuristic: If the source app placed valid TSV in text/plain, but put bogus/non-tabular 
+                // data in text/html (like Databricks returning the SQL query instead of the grid),
+                // we should discard the HTML and fall back to the plain text.
+                if (tables.length === 0) {
+                    if (gridResult !== null) {
+                        console.log("Docs Cleaner: DOM grid detected but no HTML table found. Discarding bogus HTML payload.");
+                        htmlBlob = null;
+                    } else if (cleanText && TsvDetector.detect({ hasHtml: false, plainText: cleanText })) {
+                        console.log("Docs Cleaner: Valid TSV detected in plain text and HTML has no table. Discarding bogus HTML payload.");
+                        htmlBlob = null;
+                    }
+                }
+            }
+
             if (htmlBlob) {
                 // HTML Priority
-                let htmlText = await htmlBlob.text();
-
                 // Safety: Size Limit (Bulletproof #2)
                 if (htmlText.length > 1000000) {
                     console.warn("Docs Cleaner: Content too large (" + htmlText.length + " chars).");
@@ -110,11 +152,6 @@ if (!window.__tsvCleanerListenerRegistered) {
                 }
 
                 console.log("Docs Cleaner: HTML content found. Length:", htmlText.length);
-
-                // Pre-process: Inject dummy headers for headless tables to ensure Turndown GFM works
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(htmlText, 'text/html');
-                const tables = doc.querySelectorAll('table');
 
                 let modified = false;
 
@@ -236,7 +273,9 @@ if (!window.__tsvCleanerListenerRegistered) {
                 // Grid table intercept: if we pre-computed a structured table from ARIA or heuristic
                 // DOM detection, synthesize Markdown from it instead of the flat plain text.
                 // This handles sites like Google Finance Beta that produce no text/html payload.
-                if (gridResult?.type === 'aria' || gridResult?.type === 'heuristic') {
+                // NOTE: 'heuristic-WIP' is a placeholder branch — HeuristicDivStrategy is not yet
+                // implemented but will return this type when it ships.
+                if (gridResult?.type === 'aria' || gridResult?.type === 'heuristic-WIP') {
                     console.log(`Docs Cleaner: ${gridResult.type} grid detected; synthesizing Markdown from DOM structure.`);
                     const cleanGridHtml = DOMPurify.sanitize(gridResult.tables[0].outerHTML, {
                         ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td'],
