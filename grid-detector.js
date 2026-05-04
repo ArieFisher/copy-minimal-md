@@ -36,15 +36,23 @@ function _intersectsSelection(node, selection) {
     return false;
 }
 
+function _log(msg) {
+    console.log(`GridDetector Trace: ${msg}`);
+}
+
 // ---------------------------------------------------------------------------
 // Strategy 1: Native <table> elements
 // ---------------------------------------------------------------------------
 
 const NativeTableStrategy = {
     canHandle(selection) {
+        _log("Checking NativeTableStrategy...");
         const tables = document.querySelectorAll('table');
         for (const t of tables) {
-            if (_intersectsSelection(t, selection)) return true;
+            if (_intersectsSelection(t, selection)) {
+                _log(`Found intersecting native <table>: ${t.id || t.className || 'unnamed'}`);
+                return true;
+            }
         }
         return false;
     },
@@ -86,7 +94,7 @@ const NativeTableStrategy = {
                 newTable.appendChild(newRow);
             }
 
-            console.log(`GridDetector [native]: rows ${minRow}–${maxRow}, cols ${minCol}–${maxCol}`);
+            _log(`[native] Identified table range: rows ${minRow}–${maxRow}, cols ${minCol}–${maxCol}`);
             return newTable;
         }).filter(Boolean);
 
@@ -100,9 +108,13 @@ const NativeTableStrategy = {
 
 const AriaGridStrategy = {
     canHandle(selection) {
+        _log("Checking AriaGridStrategy...");
         const roots = document.querySelectorAll('[role="table"], [role="grid"], [role="treegrid"]');
         for (const t of roots) {
-            if (_intersectsSelection(t, selection)) return true;
+            if (_intersectsSelection(t, selection)) {
+                _log(`Found intersecting ARIA grid: role="${t.getAttribute('role')}"`);
+                return true;
+            }
         }
         return false;
     },
@@ -178,7 +190,7 @@ const AriaGridStrategy = {
             if (thead) newTable.appendChild(thead);
             newTable.appendChild(tbody);
 
-            console.log(`GridDetector [aria]: rows ${minRow}–${maxRow}, cols ${minCol}–${maxCol}`);
+            _log(`[aria] Reconstructed table range: rows ${minRow}–${maxRow}, cols ${minCol}–${maxCol}`);
             return { type: 'aria', tables: [newTable] };
         }
 
@@ -222,13 +234,21 @@ global.GridDetector = {
      * @returns {{ type: 'native'|'aria'|'heuristic', tables: HTMLTableElement[] } | null}
      */
     extract(selection) {
-        if (!selection || selection.rangeCount === 0) return null;
+        if (!selection || selection.rangeCount === 0) {
+            _log("Abort: No selection or rangeCount is 0.");
+            return null;
+        }
+        _log("Starting grid extraction...");
         for (const strategy of this._strategies) {
             if (strategy.canHandle(selection)) {
                 const result = strategy.extract(selection);
-                if (result) return result;
+                if (result) {
+                    _log(`Match found using strategy: ${result.type}`);
+                    return result;
+                }
             }
         }
+        _log("No grid strategies matched the current selection.");
         return null;
     }
 };
