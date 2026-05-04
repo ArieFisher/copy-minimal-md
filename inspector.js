@@ -704,6 +704,13 @@ TsvDetector.addListener(async (d) => {
 // have it (e.g. the tab was opened in the foreground), otherwise wait for the
 // first focus event — no arbitrary timer needed.
 document.addEventListener('DOMContentLoaded', () => {
+    // Add version label
+    const manifest = chrome.runtime.getManifest();
+    const versionLabel = document.getElementById('version-label');
+    if (versionLabel) {
+        versionLabel.textContent = `v${manifest.version}`;
+    }
+
     if (document.hasFocus()) {
         readClipboard();
     } else {

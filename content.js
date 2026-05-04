@@ -1,6 +1,7 @@
+// Print version info to console on load
+console.log(`Docs Markdown Cleaner version: ${chrome.runtime.getManifest().version}`);
+
 // Register the cmd+shift+U variant of the TSV auto-write listener once per page.
-// The content script may be re-injected on every invocation, so guard against
-// stacking duplicate listeners on the shared TsvDetector.
 if (!window.__tsvCleanerListenerRegistered) {
     window.__tsvCleanerListenerRegistered = true;
     TsvDetector.addListener(async (d) => {
