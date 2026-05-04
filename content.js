@@ -21,6 +21,7 @@ if (!window.__tsvCleanerListenerRegistered) {
         // 1. Capture user selection for verification steps later
         const selection = window.getSelection();
         const selectedText = selection ? selection.toString().trim() : "";
+        console.log(`Docs Cleaner: Selected text length: ${selectedText.length} chars.`);
 
         // 1.5. Pre-compute grid structure from the live DOM BEFORE copying.
         // GridDetector tries native <table>, ARIA role, and heuristic div strategies in order.
@@ -111,6 +112,7 @@ if (!window.__tsvCleanerListenerRegistered) {
                 }
 
                 console.log("Docs Cleaner: HTML content found. Length:", htmlText.length);
+                console.groupCollapsed("Docs Cleaner: Processing HTML...");
 
                 // Pre-process: Inject dummy headers for headless tables to ensure Turndown GFM works
                 const parser = new DOMParser();
@@ -137,6 +139,7 @@ if (!window.__tsvCleanerListenerRegistered) {
                         }
                     }
                     if (structureMatch) {
+                        console.log(`Docs Cleaner: Repairing ${tables.length} jagged tables with DOM-extracted structure.`);
                         for (let i = 0; i < tables.length; i++) {
                             // Explicitly adopt the node into the DOMParser document before inserting.
                             // cloneNode alone creates a node owned by the live page document; adoptNode
@@ -228,6 +231,7 @@ if (!window.__tsvCleanerListenerRegistered) {
                 await navigator.clipboard.writeText(markdown);
 
                 console.log("Docs Cleaner: Markdown written to clipboard.");
+                console.groupEnd();
                 flashSuccess("Markdown Ready!");
                 return;
             } else if (textBlob) {
