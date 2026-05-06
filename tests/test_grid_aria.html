@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GridDetector — ARIA Grid Tests (AG Grid-style DOM)</title>
+  <style>
+    body { font-family: sans-serif; max-width: 960px; margin: 2rem auto; background: #0f172a; color: #e2e8f0; }
+    h1 { color: #7dd3fc; }
+    h2 { color: #94a3b8; font-size: 1rem; margin-top: 2rem; }
+    .info { color: #94a3b8; }
+
+    /* Replicate AG Grid div-based layout */
+    .ag-root { width: 100%; border: 1px solid #334155; border-radius: 4px; overflow: hidden; }
+    .ag-header { background: #1e293b; }
+    .ag-body { background: #0f172a; }
+    [role="row"] { display: flex; border-bottom: 1px solid #1e293b; }
+    [role="columnheader"] { flex: 1; padding: 8px 12px; font-weight: 600; color: #94a3b8; font-size: 0.85rem; }
+    [role="gridcell"] { flex: 1; padding: 8px 12px; color: #e2e8f0; font-size: 0.85rem; }
+
+    .test-block { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 1rem; margin: 1.5rem 0; }
+    .test-block h2 { margin-top: 0; }
+    button { background: #3b82f6; color: white; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; margin-right: 8px; margin-bottom: 8px; }
+    button:hover { background: #2563eb; }
+    .result { background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 0.75rem; margin-top: 0.75rem; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; min-height: 2rem; }
+    .pass   { border-color: #22c55e; color: #86efac; }
+    .fail   { border-color: #ef4444; color: #fca5a5; }
+    .neutral { border-color: #f59e0b; color: #fde68a; }
+  </style>
+</head>
+<body>
+  <h1>GridDetector — ARIA Grid Tests</h1>
+  <p class="info">AG Grid-style DOM: all &lt;div&gt; elements with explicit role="grid", role="row",
+  role="columnheader", and role="gridcell". No native &lt;table&gt; elements.</p>
+
+  <!-- AG Grid-style DOM replica -->
+  <div class="ag-root" role="grid" aria-label="Employee Data" id="ag-grid">
+    <div class="ag-header" role="rowgroup">
+      <div role="row" id="header-row">
+        <div role="columnheader" id="h-name">Name</div>
+        <div role="columnheader" id="h-lang">Language</div>
+        <div role="columnheader" id="h-country">Country</div>
+        <div role="columnheader" id="h-game">Game</div>
+      </div>
+    </div>
+    <div class="ag-body" role="rowgroup">
+      <div role="row" id="row-0">
+        <div role="gridcell" id="c-0-0">Tony Smith</div>
+        <div role="gridcell" id="c-0-1">English</div>
+        <div role="gridcell" id="c-0-2">Ireland</div>
+        <div role="gridcell" id="c-0-3">Chess</div>
+      </div>
+      <div role="row" id="row-1">
+        <div role="gridcell" id="c-1-0">Andrew Connell</div>
+        <div role="gridcell" id="c-1-1">Swedish</div>
+        <div role="gridcell" id="c-1-2">Sweden</div>
+        <div role="gridcell" id="c-1-3">Backgammon</div>
+      </div>
+      <div role="row" id="row-2">
+        <div role="gridcell" id="c-2-0">Kevin Flanagan</div>
+        <div role="gridcell" id="c-2-1">French</div>
+        <div role="gridcell" id="c-2-2">France</div>
+        <div role="gridcell" id="c-2-3">Go</div>
+      </div>
+      <div role="row" id="row-3">
+        <div role="gridcell" id="c-3-0">Bricker McGee</div>
+        <div role="gridcell" id="c-3-1">Spanish</div>
+        <div role="gridcell" id="c-3-2">Mexico</div>
+        <div role="gridcell" id="c-3-3">Dominoes</div>
+      </div>
+      <div role="row" id="row-4">
+        <div role="gridcell" id="c-4-0">Niall Crosby</div>
+        <div role="gridcell" id="c-4-1">German</div>
+        <div role="gridcell" id="c-4-2">Germany</div>
+        <div role="gridcell" id="c-4-3">Poker</div>
+      </div>
+    </div>
+  </div>
+
+  <button onclick="runAll()" style="margin-top: 1.5rem; background: #22c55e;">Run All Tests</button>
+
+  <!-- Test 1: DOM inventory -->
+  <div class="test-block">
+    <h2>Test 1 — DOM inventory</h2>
+    <p class="info">Confirms: zero native &lt;table&gt; elements, one role="grid" on a &lt;div&gt;,
+    explicit role="row" and role="gridcell"/role="columnheader" attributes.</p>
+    <button onclick="runTest1()">Run Test</button>
+    <div class="result" id="result1">Not run yet.</div>
+  </div>
+
+  <!-- Test 2: canHandle returns true -->
+  <div class="test-block">
+    <h2>Test 2 — AriaGridStrategy.canHandle()</h2>
+    <p class="info">Select rows 0-2 and verify canHandle returns true.</p>
+    <button onclick="runTest2()">Run Test</button>
+    <div class="result" id="result2">Not run yet.</div>
+  </div>
+
+  <!-- Test 3: extract returns structured table with header -->
+  <div class="test-block">
+    <h2>Test 3 — extract() with header + data rows selected</h2>
+    <p class="info">Select from header row through row 2. Expect type='aria', one table with
+    &lt;thead&gt; (from columnheader) and &lt;tbody&gt; with 3 data rows.</p>
+    <button onclick="runTest3()">Run Test</button>
+    <div class="result" id="result3">Not run yet.</div>
+  </div>
+
+  <!-- Test 4: extract data-only rows (no header in selection) -->
+  <div class="test-block">
+    <h2>Test 4 — extract() with data rows only (no header)</h2>
+    <p class="info">Select rows 1-3 only (no columnheader). Expect first data row promoted to thead.</p>
+    <button onclick="runTest4()">Run Test</button>
+    <div class="result" id="result4">Not run yet.</div>
+  </div>
+
+  <!-- Test 5: extract partial columns -->
+  <div class="test-block">
+    <h2>Test 5 — extract() partial column selection</h2>
+    <p class="info">Select only the Name and Language cells of rows 0-1. Expect a 2-column table.</p>
+    <button onclick="runTest5()">Run Test</button>
+    <div class="result" id="result5">Not run yet.</div>
+  </div>
+
+  <!-- Test 6: NativeTableStrategy returns null -->
+  <div class="test-block">
+    <h2>Test 6 — NativeTableStrategy returns null</h2>
+    <p class="info">Confirms the native strategy correctly skips this DOM (no &lt;table&gt; elements).</p>
+    <button onclick="runTest6()">Run Test</button>
+    <div class="result" id="result6">Not run yet.</div>
+  </div>
+
+  <!-- Test 7: Full pipeline simulation -->
+  <div class="test-block">
+    <h2>Test 7 — Full pipeline: clipboard HTML → ARIA injection → Markdown</h2>
+    <p class="info">Simulates the content.js HTML branch end-to-end. Fabricates the flat clipboard
+    HTML a browser would produce from the div-based grid, runs GridDetector.extract(), then
+    applies the ARIA injection fix + DOMPurify + Turndown. Expects a well-formed Markdown table
+    instead of flat concatenated text.</p>
+    <button onclick="runTest7()">Run Test</button>
+    <div class="result" id="result7">Not run yet.</div>
+  </div>
+
+  <script src="../lib/purify.min.js"></script>
+  <script src="../lib/turndown.js"></script>
+  <script src="../lib/turndown-plugin-gfm.js"></script>
+  <script src="../grid-detector.js"></script>
+  <script>
+    function selectRange(startEl, endEl) {
+      const range = document.createRange();
+      range.setStartBefore(startEl);
+      range.setEndAfter(endEl);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return sel;
+    }
+
+    function tableToString(table) {
+      if (!table) return 'null';
+      const rows = Array.from(table.querySelectorAll('tr'));
+      return rows.map(r =>
+        Array.from(r.cells).map(c => c.textContent.padEnd(18)).join('| ')
+      ).join('\n');
+    }
+
+    function runTest1() {
+      const el = document.getElementById('result1');
+      const nativeTables = document.querySelectorAll('table').length;
+      const grids = document.querySelectorAll('[role="grid"]');
+      const rows = document.querySelectorAll('[role="row"]');
+      const cells = document.querySelectorAll('[role="gridcell"]');
+      const headers = document.querySelectorAll('[role="columnheader"]');
+
+      const pass = nativeTables === 0
+        && grids.length === 1
+        && grids[0].tagName === 'DIV'
+        && rows.length === 6
+        && cells.length === 20
+        && headers.length === 4;
+
+      el.className = 'result ' + (pass ? 'pass' : 'fail');
+      el.textContent = [
+        `Native <table> elements:    ${nativeTables}  (expected 0)`,
+        `[role="grid"] elements:     ${grids.length}  (expected 1, tag: ${grids[0]?.tagName})`,
+        `[role="row"] elements:      ${rows.length}  (expected 6: 1 header + 5 data)`,
+        `[role="gridcell"] elements: ${cells.length}  (expected 20)`,
+        `[role="columnheader"]:      ${headers.length}  (expected 4)`,
+        ``,
+        `status: ${pass ? '✅ PASS — div-based ARIA grid, no native tables' : '❌ FAIL'}`
+      ].join('\n');
+    }
+
+    function runTest2() {
+      const el = document.getElementById('result2');
+      const sel = selectRange(
+        document.getElementById('c-0-0'),
+        document.getElementById('c-2-3')
+      );
+      // Access internal strategy directly
+      const strategy = GridDetector._strategies[1]; // AriaGridStrategy
+      const result = strategy.canHandle(sel);
+
+      el.className = 'result ' + (result ? 'pass' : 'fail');
+      el.textContent = [
+        `AriaGridStrategy.canHandle() returned: ${result}`,
+        `Selection text: "${sel.toString().substring(0, 80)}..."`,
+        ``,
+        `status: ${result ? '✅ PASS — ARIA strategy recognizes the grid' : '❌ FAIL — strategy did not match'}`
+      ].join('\n');
+    }
+
+    function runTest3() {
+      const el = document.getElementById('result3');
+      // Select from header through row 2
+      const sel = selectRange(
+        document.getElementById('h-name'),
+        document.getElementById('c-2-3')
+      );
+      const result = GridDetector.extract(sel);
+
+      if (!result) {
+        el.className = 'result fail';
+        el.textContent = 'GridDetector.extract() returned null — ❌ FAIL';
+        return;
+      }
+
+      const table = result.tables[0];
+      const thead = table.querySelector('thead');
+      const tbody = table.querySelector('tbody');
+      const theadRows = thead ? thead.querySelectorAll('tr').length : 0;
+      const tbodyRows = tbody ? tbody.querySelectorAll('tr').length : 0;
+      const headerCells = thead ? Array.from(thead.querySelectorAll('th')).map(c => c.textContent) : [];
+      const firstDataRow = tbody?.querySelector('tr');
+      const firstDataCells = firstDataRow ? Array.from(firstDataRow.cells).map(c => c.textContent) : [];
+
+      const pass = result.type === 'aria'
+        && theadRows === 1
+        && tbodyRows === 3
+        && headerCells.join(',') === 'Name,Language,Country,Game'
+        && firstDataCells[0] === 'Tony Smith';
+
+      el.className = 'result ' + (pass ? 'pass' : 'fail');
+      el.textContent = [
+        `type:           ${result.type}  (expected: aria)`,
+        `tables.length:  ${result.tables.length}`,
+        `<thead> rows:   ${theadRows}  (expected 1)`,
+        `<tbody> rows:   ${tbodyRows}  (expected 3)`,
+        `Header cells:   [${headerCells.join(', ')}]`,
+        `First data row: [${firstDataCells.join(', ')}]`,
+        ``,
+        `Reconstructed table:`,
+        tableToString(table),
+        ``,
+        `status: ${pass ? '✅ PASS — correct thead/tbody structure from ARIA roles' : '❌ FAIL'}`
+      ].join('\n');
+    }
+
+    function runTest4() {
+      const el = document.getElementById('result4');
+      // Select only data rows 1-3 (no header in selection)
+      const sel = selectRange(
+        document.getElementById('c-1-0'),
+        document.getElementById('c-3-3')
+      );
+      const result = GridDetector.extract(sel);
+
+      if (!result) {
+        el.className = 'result fail';
+        el.textContent = 'GridDetector.extract() returned null — ❌ FAIL';
+        return;
+      }
+
+      const table = result.tables[0];
+      const thead = table.querySelector('thead');
+      const tbody = table.querySelector('tbody');
+      const theadRows = thead ? thead.querySelectorAll('tr').length : 0;
+      const tbodyRows = tbody ? tbody.querySelectorAll('tr').length : 0;
+      const headerCells = thead ? Array.from(thead.querySelectorAll('th')).map(c => c.textContent) : [];
+
+      // First data row (Andrew Connell) should be promoted to header
+      const pass = result.type === 'aria'
+        && theadRows === 1
+        && tbodyRows === 2
+        && headerCells[0] === 'Andrew Connell';
+
+      el.className = 'result ' + (pass ? 'pass' : 'fail');
+      el.textContent = [
+        `type:           ${result.type}  (expected: aria)`,
+        `<thead> rows:   ${theadRows}  (expected 1, promoted from data)`,
+        `<tbody> rows:   ${tbodyRows}  (expected 2)`,
+        `Promoted header: [${headerCells.join(', ')}]`,
+        `  (expected: Andrew Connell row, since no columnheader was selected)`,
+        ``,
+        `Reconstructed table:`,
+        tableToString(table),
+        ``,
+        `status: ${pass ? '✅ PASS — first data row promoted to thead' : '❌ FAIL'}`
+      ].join('\n');
+    }
+
+    function runTest5() {
+      const el = document.getElementById('result5');
+      // Select just Name and Language for rows 0-1
+      const sel = selectRange(
+        document.getElementById('c-0-0'),
+        document.getElementById('c-1-1')
+      );
+      const result = GridDetector.extract(sel);
+
+      if (!result) {
+        el.className = 'result fail';
+        el.textContent = 'GridDetector.extract() returned null — ❌ FAIL';
+        return;
+      }
+
+      const table = result.tables[0];
+      const allCols = table.querySelectorAll('tr');
+      const colCountPerRow = Array.from(allCols).map(r => r.cells.length);
+      const allTwoCols = colCountPerRow.every(c => c === 2);
+
+      const pass = result.type === 'aria' && allTwoCols;
+
+      el.className = 'result ' + (pass ? 'pass' : 'fail');
+      el.textContent = [
+        `type:               ${result.type}  (expected: aria)`,
+        `Columns per row:    [${colCountPerRow.join(', ')}]  (expected all 2)`,
+        ``,
+        `Reconstructed table:`,
+        tableToString(table),
+        ``,
+        `status: ${pass ? '✅ PASS — partial column selection works' : '❌ FAIL'}`
+      ].join('\n');
+    }
+
+    function runTest6() {
+      const el = document.getElementById('result6');
+      const sel = selectRange(
+        document.getElementById('c-0-0'),
+        document.getElementById('c-2-3')
+      );
+      const strategy = GridDetector._strategies[0]; // NativeTableStrategy
+      const canHandle = strategy.canHandle(sel);
+
+      el.className = 'result ' + (!canHandle ? 'pass' : 'fail');
+      el.textContent = [
+        `NativeTableStrategy.canHandle() returned: ${canHandle}  (expected: false)`,
+        ``,
+        `status: ${!canHandle ? '✅ PASS — native strategy correctly skips div-based grid' : '❌ FAIL'}`
+      ].join('\n');
+    }
+
+    function runTest7() {
+      const el = document.getElementById('result7');
+
+      // 1. Select header + rows 0-2 and run GridDetector
+      const sel = selectRange(
+        document.getElementById('h-name'),
+        document.getElementById('c-2-3')
+      );
+      const gridResult = GridDetector.extract(sel);
+
+      if (!gridResult) {
+        el.className = 'result fail';
+        el.textContent = 'GridDetector.extract() returned null — ❌ FAIL';
+        return;
+      }
+
+      // 2. Fabricate clipboard HTML: what a browser puts in text/html when copying
+      //    from a div-based ARIA grid. Just the flat text, no <table> structure.
+      const fakeClipboardHtml = '<html><body>'
+        + '<div>Name</div><div>Language</div><div>Country</div><div>Game</div>'
+        + '<div>Tony Smith</div><div>English</div><div>Ireland</div><div>Chess</div>'
+        + '<div>Andrew Connell</div><div>Swedish</div><div>Sweden</div><div>Backgammon</div>'
+        + '<div>Kevin Flanagan</div><div>French</div><div>France</div><div>Go</div>'
+        + '</body></html>';
+
+      // 3. Run the content.js HTML-branch pipeline
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(fakeClipboardHtml, 'text/html');
+      const tables = doc.querySelectorAll('table');
+
+      // This is the fix: inject ARIA grid when clipboard HTML has no tables
+      let injected = false;
+      if (tables.length === 0 && (gridResult.type === 'aria' || gridResult.type === 'heuristic')) {
+        doc.body.innerHTML = '';
+        for (const t of gridResult.tables) {
+          doc.body.appendChild(doc.adoptNode(t.cloneNode(true)));
+        }
+        injected = true;
+      }
+
+      // Verify tables now exist in the doc
+      const injectedTables = doc.querySelectorAll('table');
+
+      // thead promotion (same logic as content.js)
+      injectedTables.forEach(table => {
+        const firstRow = table.rows[0];
+        if (firstRow && !table.tHead) {
+          const isImplicitHeader = Array.from(firstRow.cells).every(cell => cell.tagName === 'TH');
+          if (!isImplicitHeader) {
+            const thead = doc.createElement('thead');
+            const tr = doc.createElement('tr');
+            for (let i = 0; i < firstRow.cells.length; i++) {
+              const th = doc.createElement('th');
+              th.textContent = firstRow.cells[i]?.textContent || '';
+              tr.appendChild(th);
+            }
+            thead.appendChild(tr);
+            table.insertBefore(thead, table.firstChild);
+            firstRow.remove();
+          }
+        }
+      });
+
+      let htmlText = doc.body.innerHTML;
+
+      // DOMPurify
+      const cleanHtml = DOMPurify.sanitize(htmlText, {
+        ALLOWED_TAGS: ['h1','h2','h3','h4','h5','h6','p','ul','ol','li','b','i','strong','em','u','a','img','table','thead','tbody','tr','th','td','br','hr','blockquote','code','pre'],
+        ALLOWED_ATTR: ['href','src','alt','title'],
+        ALLOW_DATA_ATTR: false
+      });
+
+      // Turndown
+      const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+      turndownService.use(turndownPluginGfm.gfm);
+      const markdown = turndownService.turndown(cleanHtml);
+
+      // 4. Also run WITHOUT the fix to show the broken output
+      const doc2 = parser.parseFromString(fakeClipboardHtml, 'text/html');
+      const cleanHtml2 = DOMPurify.sanitize(doc2.body.innerHTML, {
+        ALLOWED_TAGS: ['h1','h2','h3','h4','h5','h6','p','ul','ol','li','b','i','strong','em','u','a','img','table','thead','tbody','tr','th','td','br','hr','blockquote','code','pre'],
+        ALLOWED_ATTR: ['href','src','alt','title'],
+        ALLOW_DATA_ATTR: false
+      });
+      const turndown2 = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+      turndown2.use(turndownPluginGfm.gfm);
+      const brokenMarkdown = turndown2.turndown(cleanHtml2);
+
+      // 5. Assertions
+      const hasTable = markdown.includes('|') && markdown.includes('---');
+      const hasHeader = markdown.includes('Name') && markdown.includes('Language');
+      const hasData = markdown.includes('Tony Smith') && markdown.includes('Kevin Flanagan');
+      const brokenIsFlat = !brokenMarkdown.includes('---');
+      const pass = injected && hasTable && hasHeader && hasData && brokenIsFlat;
+
+      el.className = 'result ' + (pass ? 'pass' : 'fail');
+      el.textContent = [
+        `--- WITH fix (ARIA injection) ---`,
+        markdown,
+        ``,
+        `--- WITHOUT fix (flat clipboard HTML only) ---`,
+        brokenMarkdown,
+        ``,
+        `Assertions:`,
+        `  ARIA table injected:     ${injected}`,
+        `  Output has table pipes:  ${hasTable}`,
+        `  Output has header row:   ${hasHeader}`,
+        `  Output has data rows:    ${hasData}`,
+        `  Without fix is flat:     ${brokenIsFlat}`,
+        ``,
+        `status: ${pass ? '✅ PASS — full pipeline produces Markdown table from ARIA grid' : '❌ FAIL'}`
+      ].join('\n');
+    }
+
+    function runAll() {
+      runTest1();
+      runTest2();
+      runTest3();
+      runTest4();
+      runTest5();
+      runTest6();
+      runTest7();
+    }
+  </script>
+</body>
+</html>

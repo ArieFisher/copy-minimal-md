@@ -150,11 +150,20 @@ if (!window.__tsvCleanerListenerRegistered) {
                     }
                 }
 
-                // Re-query tables after potential replacement for the rest of the processing.
-                // Note: if structuredDomTables was empty (e.g. the page renders its grid with JS/canvas
-                // or <div> elements — as some versions of Google Finance do — rather than native <table>
-                // elements), the replacement block above was a no-op and we fall through here using the
-                // browser's native clipboard HTML as-is.
+                // ARIA / heuristic grid injection: the clipboard HTML from div-based grids
+                // (e.g. AG Grid, Databricks) contains flat text with no <table> structure.
+                // If GridDetector reconstructed a table from the live DOM, replace the
+                // clipboard body with it so Turndown produces a proper Markdown table.
+                if (tables.length === 0 && (gridResult?.type === 'aria' || gridResult?.type === 'heuristic')) {
+                    console.log(`Docs Cleaner: Clipboard HTML has no tables; injecting ${gridResult.type} grid.`);
+                    doc.body.innerHTML = '';
+                    for (const t of gridResult.tables) {
+                        doc.body.appendChild(doc.adoptNode(t.cloneNode(true)));
+                    }
+                    modified = true;
+                }
+
+                // Re-query tables after potential replacement or injection.
                 const currentTables = doc.querySelectorAll('table');
 
                 // Fix Google Sheets extra newlines by converting block-level divs to inline spans inside tables.
