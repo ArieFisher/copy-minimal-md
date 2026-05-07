@@ -104,6 +104,10 @@ const NativeTableStrategy = {
 
 // ---------------------------------------------------------------------------
 // Strategy 2: ARIA Grid (role="grid" / "table" / "treegrid")
+//
+// Also handles "hybrid" DOMs where the ARIA root contains native <tr>/<td>/<th>
+// elements without explicit role="row"/role="cell" attributes. The browser
+// treats these as implicit row/cell roles; we match them the same way.
 // ---------------------------------------------------------------------------
 
 const AriaGridStrategy = {
@@ -120,17 +124,34 @@ const AriaGridStrategy = {
     },
 
     extract(selection) {
-        const CELL_ROLES = '[role="cell"], [role="gridcell"], [role="columnheader"], [role="rowheader"]';
+        const ARIA_CELL_ROLES = '[role="cell"], [role="gridcell"], [role="columnheader"], [role="rowheader"]';
         const roots = document.querySelectorAll('[role="table"], [role="grid"], [role="treegrid"]');
 
         for (const root of roots) {
             if (!_intersectsSelection(root, selection)) continue;
 
-            const ariaRows = root.querySelectorAll('[role="row"]');
+            // Match explicit ARIA rows AND native <tr> elements.  Filter out
+            // <tr>s that live inside a native <table> — those belong to
+            // NativeTableStrategy (e.g. hidden chart-accessibility tables).
+            const ariaRows = Array.from(
+                root.querySelectorAll('[role="row"], tr')
+            ).filter(el => {
+                if (el.tagName !== 'TR') return true;
+                const t = el.closest('table');
+                // Discard TRs that belong to a nested table *inside* the ARIA root.
+                // Keep TRs that belong directly to the ARIA root (or to an ancestor layout table).
+                return !t || !root.contains(t) || t === root;
+            });
+
             let minRow = Infinity, maxRow = -1, minCol = Infinity, maxCol = -1;
 
             for (let r = 0; r < ariaRows.length; r++) {
-                const ariaCells = ariaRows[r].querySelectorAll(CELL_ROLES);
+                // For native <tr>, use .cells (direct <td>/<th> children only).
+                // For ARIA rows, query by role attribute.
+                const ariaCells = ariaRows[r].tagName === 'TR'
+                    ? ariaRows[r].cells
+                    : ariaRows[r].querySelectorAll(ARIA_CELL_ROLES);
+                // TODO: Revisit <td colspan="2">. Currently spans are ignored and treated as single cells.
                 for (let c = 0; c < ariaCells.length; c++) {
                     if (_intersectsSelection(ariaCells[c], selection)) {
                         if (r < minRow) minRow = r;
@@ -150,14 +171,19 @@ const AriaGridStrategy = {
             for (let r = minRow; r <= maxRow; r++) {
                 const ariaRow = ariaRows[r];
                 if (!ariaRow) continue;
-                const ariaCells = ariaRow.querySelectorAll(CELL_ROLES);
+                const ariaCells = ariaRow.tagName === 'TR'
+                    ? ariaRow.cells
+                    : ariaRow.querySelectorAll(ARIA_CELL_ROLES);
                 const tr = document.createElement('tr');
                 let isHeaderRow = false;
 
                 for (let c = minCol; c <= maxCol; c++) {
                     const ariaCell = ariaCells[c];
                     const isSelected = ariaCell && _intersectsSelection(ariaCell, selection);
-                    const isHeader = ariaCell && ariaCell.getAttribute('role') === 'columnheader';
+                    const isHeader = ariaCell && (
+                        ariaCell.getAttribute('role') === 'columnheader' ||
+                        ariaCell.tagName === 'TH'
+                    );
                     if (isHeader) isHeaderRow = true;
                     const cell = document.createElement(isHeader ? 'th' : 'td');
                     if (isSelected && ariaCell) cell.textContent = ariaCell.textContent.trim();
