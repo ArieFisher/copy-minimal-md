@@ -518,6 +518,9 @@ function buildAriaBypassCard(ariaPreview) {
         const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
         if (typeof turndownPluginGfm !== 'undefined') td.use(turndownPluginGfm.gfm);
         markdown = td.turndown(ariaPreview.html);
+        console.log('Inspector (DOM Bypass): Converted table HTML to Markdown:', markdown);
+    } else {
+        console.warn('Inspector (DOM Bypass): TurndownService not available — markdown will be empty.');
     }
 
     const dataSectionOuter = document.createElement('div');
@@ -810,12 +813,16 @@ async function readClipboard() {
         }
 
         try {
+            console.log('Inspector: Requesting aria-preview data from background...');
             const ariaPreview = await chrome.runtime.sendMessage({ type: 'get-aria-preview' });
             if (ariaPreview) {
+                console.log(`Inspector: Received aria-preview — ${ariaPreview.cellCount} cells across ${ariaPreview.rowCount} rows. Rendering DOM Bypass card.`);
                 containerEl.appendChild(buildAriaBypassCard(ariaPreview));
+            } else {
+                console.log('Inspector: No aria-selected data from background (no cells were selected, or page was not injectable).');
             }
         } catch (e) {
-            // No aria-preview data available (restricted page, or not yet injected)
+            console.warn('Inspector: Could not retrieve aria-preview from background:', e.message);
         }
 
         loadingEl.style.display = 'none';
