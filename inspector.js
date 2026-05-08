@@ -489,6 +489,137 @@ async function simulateCopyMinimalMd(clipboardItems) {
     return card;
 }
 
+function buildAriaBypassCard(ariaPreview) {
+    const card = document.createElement('div');
+    card.className = 'clipboard-card';
+    card.style.border = '2px dashed #d97706'; // amber — distinct from simulated's grey
+
+    const header = document.createElement('div');
+    header.className = 'card-header';
+
+    const titleText = document.createElement('h2');
+    titleText.style.margin = '0';
+    titleText.textContent = 'Experimental: DOM Bypass';
+
+    const sourceBadge = document.createElement('span');
+    sourceBadge.style.color = '#94a3b8';
+    sourceBadge.style.marginLeft = '12px';
+    sourceBadge.style.fontSize = '0.9rem';
+    sourceBadge.style.fontWeight = 'normal';
+    sourceBadge.textContent = `${ariaPreview.cellCount} cells, ${ariaPreview.rowCount} rows · aria-selected`;
+    titleText.appendChild(sourceBadge);
+
+    header.appendChild(titleText);
+    card.appendChild(header);
+
+    // Convert the reconstructed table HTML to Markdown via Turndown GFM
+    let markdown = '';
+    if (typeof TurndownService !== 'undefined') {
+        const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+        if (typeof turndownPluginGfm !== 'undefined') td.use(turndownPluginGfm.gfm);
+        markdown = td.turndown(ariaPreview.html);
+    }
+
+    const dataSectionOuter = document.createElement('div');
+    dataSectionOuter.style.marginTop = '1rem';
+
+    const mdHeaderContainer = document.createElement('div');
+    mdHeaderContainer.style.display = 'flex';
+    mdHeaderContainer.style.justifyContent = 'space-between';
+    mdHeaderContainer.style.alignItems = 'center';
+    mdHeaderContainer.style.marginBottom = '0.5rem';
+
+    const mdHeader = document.createElement('h3');
+    mdHeader.style.color = '#e2e8f0';
+    mdHeader.style.margin = '0';
+    mdHeader.style.fontSize = '1.1rem';
+    const mdSize = formatBytes(new Blob([markdown]).size);
+    mdHeader.innerHTML = 'DOM Bypass: Markdown &nbsp;&nbsp;&nbsp; <span style="opacity: 0.6; font-size: 0.9em; font-weight: normal;">' + mdSize + '</span>';
+    mdHeaderContainer.appendChild(mdHeader);
+
+    const mdCopyBtn = document.createElement('button');
+    mdCopyBtn.textContent = 'Copy to Clipboard';
+    mdCopyBtn.style.cssText = 'cursor:pointer;padding:4px 8px;background:#d97706;color:#fff;border:none;border-radius:4px;';
+    mdCopyBtn.onclick = async () => {
+        try {
+            await navigator.clipboard.writeText(markdown);
+            mdCopyBtn.textContent = 'Copied!';
+            setTimeout(() => { mdCopyBtn.textContent = 'Copy to Clipboard'; }, 1500);
+        } catch (err) {
+            mdCopyBtn.textContent = 'Error';
+            setTimeout(() => { mdCopyBtn.textContent = 'Copy to Clipboard'; }, 2000);
+        }
+    };
+    mdHeaderContainer.appendChild(mdCopyBtn);
+    dataSectionOuter.appendChild(mdHeaderContainer);
+
+    const dataPair = document.createElement('div');
+    dataPair.className = 'data-pair';
+
+    const emptyLeft = document.createElement('div');
+    emptyLeft.className = 'pane';
+    dataPair.appendChild(emptyLeft);
+
+    const tabbedPane = document.createElement('div');
+    tabbedPane.className = 'tabbed-pane';
+
+    const tabsHeader = document.createElement('div');
+    tabsHeader.className = 'tabs-header';
+
+    const renderBtn = document.createElement('button');
+    renderBtn.className = 'tab-btn active';
+    renderBtn.textContent = 'Rendered View';
+
+    const rawBtn = document.createElement('button');
+    rawBtn.className = 'tab-btn';
+    rawBtn.textContent = 'Raw Markdown';
+
+    tabsHeader.appendChild(renderBtn);
+    tabsHeader.appendChild(rawBtn);
+    tabbedPane.appendChild(tabsHeader);
+
+    const tabContent = document.createElement('div');
+    tabContent.className = 'tab-content';
+    tabbedPane.appendChild(tabContent);
+
+    const rawScroll = document.createElement('div');
+    rawScroll.className = 'scroll-container';
+    rawScroll.style.display = 'none';
+    const dataContent = document.createElement('pre');
+    dataContent.className = 'data-content';
+    dataContent.textContent = markdown || '[Empty]';
+    rawScroll.appendChild(dataContent);
+
+    const renderedScroll = document.createElement('div');
+    renderedScroll.className = 'scroll-container';
+    const renderedContent = document.createElement('div');
+    renderedContent.className = 'rendered-content';
+    if (typeof marked !== 'undefined') {
+        renderedContent.innerHTML = marked.parse(markdown, { breaks: true });
+    } else {
+        renderedContent.textContent = markdown;
+    }
+    renderedScroll.appendChild(renderedContent);
+
+    tabContent.appendChild(renderedScroll);
+    tabContent.appendChild(rawScroll);
+
+    renderBtn.onclick = () => {
+        renderBtn.classList.add('active'); rawBtn.classList.remove('active');
+        rawScroll.style.display = 'none'; renderedScroll.style.display = 'block';
+    };
+    rawBtn.onclick = () => {
+        rawBtn.classList.add('active'); renderBtn.classList.remove('active');
+        renderedScroll.style.display = 'none'; rawScroll.style.display = 'block';
+    };
+
+    dataPair.appendChild(tabbedPane);
+    dataSectionOuter.appendChild(dataPair);
+    card.appendChild(dataSectionOuter);
+
+    return card;
+}
+
 async function readClipboard() {
     const containerEl = document.getElementById('output-container');
     const errorEl = document.getElementById('error');
@@ -676,6 +807,15 @@ async function readClipboard() {
 
         if (simCard) {
             containerEl.appendChild(simCard);
+        }
+
+        try {
+            const ariaPreview = await chrome.runtime.sendMessage({ type: 'get-aria-preview' });
+            if (ariaPreview) {
+                containerEl.appendChild(buildAriaBypassCard(ariaPreview));
+            }
+        } catch (e) {
+            // No aria-preview data available (restricted page, or not yet injected)
         }
 
         loadingEl.style.display = 'none';

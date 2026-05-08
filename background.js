@@ -1,4 +1,21 @@
-chrome.commands.onCommand.addListener((command) => {
+let lastAriaPreview = null;
+let pendingAriaPreviewResolve = null;
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg.type === 'aria-preview') {
+        lastAriaPreview = msg.data;
+        pendingAriaPreviewResolve?.();
+        pendingAriaPreviewResolve = null;
+        return false;
+    }
+    if (msg.type === 'get-aria-preview') {
+        sendResponse(lastAriaPreview);
+        lastAriaPreview = null;
+        return false;
+    }
+});
+
+chrome.commands.onCommand.addListener(async (command) => {
     if (command === "run-markdown-clean") {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             const currentTab = tabs[0];
@@ -14,6 +31,17 @@ chrome.commands.onCommand.addListener((command) => {
     }
 
     if (command === "inspect-clipboard") {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const tab = tabs[0];
+        if (tab?.url && /^https?:|^file:/.test(tab.url)) {
+            await new Promise((resolve) => {
+                pendingAriaPreviewResolve = resolve;
+                setTimeout(resolve, 500);
+                chrome.scripting
+                    .executeScript({ target: { tabId: tab.id }, files: ['aria-preview.js'] })
+                    .catch(resolve);
+            });
+        }
         chrome.tabs.create({ url: chrome.runtime.getURL("inspector.html") });
     }
 });
