@@ -506,7 +506,7 @@ function buildAriaBypassCard(ariaPreview) {
     sourceBadge.style.marginLeft = '12px';
     sourceBadge.style.fontSize = '0.9rem';
     sourceBadge.style.fontWeight = 'normal';
-    sourceBadge.textContent = `${ariaPreview.cellCount} cells, ${ariaPreview.rowCount} rows · aria-selected`;
+    sourceBadge.textContent = `${ariaPreview.cellCount} cells, ${ariaPreview.rowCount} rows · ${ariaPreview.strategy ?? 'aria-selected'}`;
     titleText.appendChild(sourceBadge);
 
     header.appendChild(titleText);
