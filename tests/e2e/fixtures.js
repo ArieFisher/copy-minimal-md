@@ -35,7 +35,7 @@ function startServer() {
       resolve({
         baseUrl: `http://127.0.0.1:${port}`,
         servePage: (pathname, html) => pages.set(pathname, html),
-        close: () => new Promise((r) => server.close(r)),
+        close: () => { server.closeAllConnections(); return new Promise((r) => server.close(r)); },
       });
     });
   });
