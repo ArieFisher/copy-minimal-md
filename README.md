@@ -146,6 +146,35 @@ Install as an unpacked extension:
 4.  Click **Load unpacked**
 5.  Select the project folder (containing `manifest.json`)
 
+## Testing
+
+The project uses an LLM-driven testing workflow. All tests run in the cloud — no local install needed for development.
+
+| Tier | Tool | Runs |
+|------|------|------|
+| Unit | Vitest + jsdom | On every push (GitHub Actions) and during agent fix sessions |
+| Regression fixtures | Vitest, data-driven | Same — globs `tests/regressions/*/` |
+| End-to-end | Playwright + headed Chromium | On every PR (CI uses `xvfb-run`) |
+
+### Running locally (optional)
+
+```
+npm ci
+npm test              # unit + regression
+npm run test:e2e      # requires `npx playwright install chromium` once
+```
+
+### Reporting a bug → permanent regression
+
+1. Paste the URL or DOM into a chat with the agent and describe what's wrong.
+2. The agent saves it as `tests/regressions/YYYY-MM-DD-slug/input.html`.
+3. The agent writes `expected.md` (correct output) and fixes the code until the new fixture and every existing fixture passes.
+4. The fix and fixture are committed together; CI confirms on PR.
+
+### Capturing ARIA-grid reference fixtures
+
+`npm run capture:fixtures` opens Playwright against 5 public ARIA-table sites (W3C APG, React Aria, MUI, CodePen, Observable) and saves rendered DOM into `tests/regressions/`. Re-run anytime to refresh.
+
 ## Troubleshooting
 
 ### "Copy Failed: Clipboard content mismatch"
