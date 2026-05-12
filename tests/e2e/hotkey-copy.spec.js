@@ -42,7 +42,7 @@ test('content.js pipeline writes a Markdown table for an ARIA grid selection', a
   await serviceWorker.evaluate(async (id) => {
     await chrome.scripting.executeScript({
       target: { tabId: id },
-      files: ['lib/purify.min.js', 'lib/turndown.js', 'lib/turndown-plugin-gfm.js', 'lib/marked.min.js', 'tsv-detector.js', 'grid-detector.js', 'content.js'],
+      files: ['lib/purify.min.js', 'lib/turndown.js', 'lib/turndown-plugin-gfm.js', 'lib/marked.min.js', 'tsv-detector.js', 'grid-detector.js', 'pipeline.js', 'content.js'],
     });
   }, tabId);
 
