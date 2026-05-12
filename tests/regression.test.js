@@ -16,8 +16,10 @@
  * sees a real selection.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+
+const UPDATE = process.env.UPDATE_FIXTURES === '1';
 
 const { htmlToMarkdown } = require('./_adapter.js');
 
@@ -68,9 +70,14 @@ describe('regression fixtures', () => {
 
       const actual = htmlToMarkdown(actualInput, opts).trim();
 
+      if (UPDATE) {
+        writeFileSync(expectedPath, actual + '\n');
+        console.log(`[UPDATE_FIXTURES] wrote ${expectedPath}`);
+        return;
+      }
       if (!existsSync(expectedPath)) {
         throw new Error(
-          `Fixture "${slug}" has no expected.md.\nActual output (review and save as expected.md if correct):\n---\n${actual}\n---\n`,
+          `Fixture "${slug}" has no expected.md.\nActual output (review then re-run with UPDATE_FIXTURES=1 to save):\n---\n${actual}\n---\n`,
         );
       }
       const expected = readFileSync(expectedPath, 'utf8').trim();

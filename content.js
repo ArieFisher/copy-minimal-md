@@ -114,129 +114,8 @@ if (!window.__tsvCleanerListenerRegistered) {
                 console.log("Docs Cleaner: HTML content found. Length:", htmlText.length);
                 console.groupCollapsed("Docs Cleaner: Processing HTML...");
 
-                // Pre-process: Inject dummy headers for headless tables to ensure Turndown GFM works
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(htmlText, 'text/html');
-                const tables = doc.querySelectorAll('table');
+                const markdown = Pipeline.htmlToMarkdown(htmlText, { gridResult });
 
-                let modified = false;
-
-                // Attempt to fix malformed jagged tables by replacing them with our DOM-extracted structured tables.
-                // Guard 1: table counts must match — prevents accidentally replacing tables in apps like Google Docs
-                //   or Notion that emit hidden wrapper/layout tables in their clipboard HTML.
-                // Guard 2: column count sanity — if the clipboard table's max column count is more than 2× our
-                //   DOM table's column count it is almost certainly a different (layout) table, not the data table
-                //   the user selected. Skip replacement in that case.
-                if (tables.length > 0 && gridResult?.type === 'native' && gridResult.tables.length === tables.length) {
-                    let structureMatch = true;
-                    for (let i = 0; i < tables.length; i++) {
-                        const maxClipboardCols = Math.max(...Array.from(tables[i].rows).map(r => r.cells.length));
-                        const domCols = gridResult.tables[i].rows[0]?.cells.length || 0;
-                        if (domCols > 0 && maxClipboardCols > domCols * 2) {
-                            console.warn(`Docs Cleaner: Table ${i} column mismatch (clipboard max: ${maxClipboardCols}, dom: ${domCols}). Skipping structured replacement.`);
-                            structureMatch = false;
-                            break;
-                        }
-                    }
-                    if (structureMatch) {
-                        console.log(`Docs Cleaner: Repairing ${tables.length} jagged tables with DOM-extracted structure.`);
-                        for (let i = 0; i < tables.length; i++) {
-                            // Explicitly adopt the node into the DOMParser document before inserting.
-                            // cloneNode alone creates a node owned by the live page document; adoptNode
-                            // transfers ownership to doc, preventing any cross-document reference issues.
-                            tables[i].replaceWith(doc.adoptNode(gridResult.tables[i].cloneNode(true)));
-                        }
-                        modified = true;
-                    }
-                }
-
-                // ARIA / heuristic grid injection: the clipboard HTML from div-based grids
-                // (e.g. AG Grid, Databricks) contains flat text with no <table> structure.
-                // If GridDetector reconstructed a table from the live DOM, replace the
-                // clipboard body with it so Turndown produces a proper Markdown table.
-                if (tables.length === 0 && (gridResult?.type === 'aria' || gridResult?.type === 'heuristic')) {
-                    console.log(`Docs Cleaner: Clipboard HTML has no tables; injecting ${gridResult.type} grid.`);
-                    doc.body.innerHTML = '';
-                    for (const t of gridResult.tables) {
-                        doc.body.appendChild(doc.adoptNode(t.cloneNode(true)));
-                    }
-                    modified = true;
-                }
-
-                // Re-query tables after potential replacement or injection.
-                const currentTables = doc.querySelectorAll('table');
-
-                // Fix Google Sheets extra newlines by converting block-level divs to inline spans inside tables.
-                // Queried from the full doc (not scoped to currentTables) so freshly adopted nodes are included.
-                const cells = doc.querySelectorAll('td div, th div');
-                Array.from(cells).forEach(div => {
-                    const span = doc.createElement('span');
-                    span.append(...div.childNodes);
-                    div.replaceWith(span);
-                    modified = true;
-                });
-
-                // Fix Google Docs wrapping entire copy in a fake bold tag
-                const fakeBolds = doc.querySelectorAll('b[style*="font-weight:normal"], b[style*="font-weight: normal"]');
-                Array.from(fakeBolds).forEach(b => {
-                    const span = doc.createElement('span');
-                    span.append(...b.childNodes);
-                    b.replaceWith(span);
-                    modified = true;
-                });
-
-                currentTables.forEach(table => {
-                    const firstRow = table.rows[0];
-                    if (firstRow && !table.tHead) {
-                        // Check if the first row is actually a header row (all th) despite missing thead
-                        const isImplicitHeader = Array.from(firstRow.cells).every(cell => cell.tagName === 'TH');
-
-                        if (!isImplicitHeader) {
-                            // It's a data table without headers (e.g. partial copy)
-                            // Promote the first row as the header instead of creating empty headers
-                            const thead = doc.createElement('thead');
-                            const tr = doc.createElement('tr');
-                            // Copy content from first row to header
-                            for (let i = 0; i < firstRow.cells.length; i++) {
-                                const th = doc.createElement('th');
-                                th.textContent = firstRow.cells[i]?.textContent || "";
-                                tr.appendChild(th);
-                            }
-                            thead.appendChild(tr);
-                            table.insertBefore(thead, table.firstChild);
-                            // Remove the original first row from tbody to avoid duplication
-                            firstRow.remove();
-                            modified = true;
-                        }
-                    }
-                });
-
-                if (modified) {
-                    htmlText = doc.body.innerHTML;
-                }
-
-                // 3. Setup Converters
-                const cleanHtml = DOMPurify.sanitize(htmlText, {
-                    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'u', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'br', 'hr', 'blockquote', 'code', 'pre'],
-                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title'],
-                    ALLOW_DATA_ATTR: false
-                });
-
-                const turndownService = new TurndownService({
-                    headingStyle: 'atx',
-                    codeBlockStyle: 'fenced'
-                });
-                turndownService.use(turndownPluginGfm.gfm);
-
-                // 4. Convert to Markdown
-                let markdown = turndownService.turndown(cleanHtml);
-
-                // Post-process to fix excess whitespace within markdown links
-                markdown = markdown.replace(/\[([\s\S]+?)\]\((.*?)\)/g, (match, innerText, href) => {
-                    return `[${innerText.trim().replace(/\s+/g, ' ')}](${href})`;
-                });
-
-                // 5. Write back to clipboard
                 await navigator.clipboard.writeText(markdown);
 
                 console.log("Docs Cleaner: Markdown written to clipboard.");
@@ -252,14 +131,7 @@ if (!window.__tsvCleanerListenerRegistered) {
                 // This handles sites like Google Finance Beta that produce no text/html payload.
                 if (gridResult?.type === 'aria' || gridResult?.type === 'heuristic') {
                     console.log(`Docs Cleaner: ${gridResult.type} grid detected; synthesizing Markdown from DOM structure.`);
-                    const cleanGridHtml = DOMPurify.sanitize(gridResult.tables[0].outerHTML, {
-                        ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td'],
-                        ALLOWED_ATTR: [],
-                        ALLOW_DATA_ATTR: false
-                    });
-                    const gridTurndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-                    gridTurndown.use(turndownPluginGfm.gfm);
-                    const gridMarkdown = gridTurndown.turndown(cleanGridHtml);
+                    const gridMarkdown = Pipeline.gridToMarkdown(gridResult);
                     await navigator.clipboard.writeText(gridMarkdown);
                     console.log("Docs Cleaner: Grid Markdown written to clipboard.");
                     flashSuccess("Grid Table Ready!");
