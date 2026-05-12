@@ -70,3 +70,7 @@
 
     global.TsvDetector = { detect, addListener, fire };
 })(typeof window !== 'undefined' ? window : globalThis);
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = (typeof window !== 'undefined' ? window : globalThis).TsvDetector;
+}

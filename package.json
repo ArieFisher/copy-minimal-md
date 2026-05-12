@@ -1,0 +1,19 @@
+{
+  "name": "copy-minimal-md",
+  "version": "0.7.2",
+  "private": true,
+  "description": "Docs Markdown Cleaner Chrome extension — test harness",
+  "scripts": {
+    "test": "npm run test:unit",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:all": "npm run test:unit && npm run test:e2e",
+    "capture:fixtures": "node tests/scripts/capture-fixtures.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "jsdom": "^25.0.1",
+    "vitest": "^2.1.4"
+  }
+}
