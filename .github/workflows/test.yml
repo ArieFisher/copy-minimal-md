@@ -18,14 +18,11 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.48.0-jammy
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
       - run: xvfb-run -a npm run test:e2e
       - if: failure()
         uses: actions/upload-artifact@v4
