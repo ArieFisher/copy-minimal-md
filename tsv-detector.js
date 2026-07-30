@@ -29,7 +29,9 @@
 
         let simpleHtml = '';
         if (typeof marked !== 'undefined') {
-            simpleHtml = marked.parse(markdown).replace(/<th/gi, '<th style="font-weight: normal;"');
+            // Match <th> and <th align="…"> but never <thead> — an unanchored
+            // /<th/ rewrites the opening <thead> into <th style="…"ead>.
+            simpleHtml = marked.parse(markdown).replace(/<th(\s|>)/gi, '<th style="font-weight: normal;"$1');
         } else {
             simpleHtml = buildSimpleHtml(headerCols, lines.slice(1));
         }

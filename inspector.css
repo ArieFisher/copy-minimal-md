@@ -1,37 +1,152 @@
+/* =========================================================================
+   Clipboard Inspector — two-column comparison view.
+
+   The real clipboard sits on the left, the structure-preserving equivalents on
+   the right, and the replace actions live in the gutter between them pointing
+   left, so the action reads as "move this into the clipboard".
+
+   Typography is load-bearing: real clipboard MIME types are set in monospace,
+   derived formats are set in the serif. That contrast is how the user tells
+   "this is the clipboard" from "this is a derived preview" at a glance.
+   ========================================================================= */
+
+:root {
+  --page-bg: #f6f1e6;
+  --card-bg: #fffdf7;
+  --source-bg: #faf6ec;
+  --control-fill: #efe8d8;
+
+  --border-neutral: #e3dac4;
+  --border-control: #ddd2b8;
+  --border-hairline: #efe8d8;
+  --border-derived: #dcb9a8;
+
+  --text-primary: #2f2a20;
+  --text-pre: #4a4436;
+  --text-secondary: #6f664f;
+  --text-tertiary: #877e6a;
+
+  --accent-html: #8c4a32;
+  --accent-html-soft: #a85b3e;
+
+  --action: #5f7346;
+  --action-hover: #465733;
+  --action-primary: #3f4a33;
+
+  --success-text: #3e7a4e;
+  --success-text-dark: #3e5a34;
+  --success-fill: #e8f0e4;
+  --success-border: #b9cfae;
+
+  /* Local substitutes for the design's Lora / Karla / IBM Plex Mono. An
+     extension page must not fetch remote fonts, so these are system stacks. */
+  --font-serif: Georgia, 'Times New Roman', serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Half the grid row-gap — keeps "Replace both" centred on the seam between
+     the two clipboard cards. Change both together. */
+  --row-gap: 18px;
+  --row-gap-half: 9px;
+}
+
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
   margin: 0;
-  padding: 2rem;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  color: #e2e8f0;
+  padding: 0;
+  background: var(--page-bg);
+  color: var(--text-primary);
   min-height: 100vh;
 }
 
-h1 {
-  color: #f8fafc;
-  margin-top: 0;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+/* ---------------------------------------------------------------- header */
+
+.app-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 32px;
+  border-bottom: 1px solid var(--border-neutral);
+}
+
+.app-bar-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.app-bar-title h1 {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0;
 }
 
 #version-label {
-  font-size: 0.875rem;
-  font-weight: 400;
-  color: #94a3b8;
-  margin-left: 0.75rem;
-  opacity: 0.8;
-  vertical-align: middle;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
-p {
-  color: #94a3b8;
-  margin-bottom: 2rem;
+.app-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
+
+.segmented {
+  display: flex;
+  background: var(--control-fill);
+  border: 1px solid var(--border-control);
+  border-radius: 99px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.segment {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  border-radius: 99px;
+  padding: 6px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.segment.is-selected {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(60, 50, 20, 0.15);
+}
+
+.reread-btn {
+  background: none;
+  border: 1px solid var(--border-control);
+  color: var(--text-secondary);
+  border-radius: 99px;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reread-btn:hover {
+  border-color: var(--action);
+  color: var(--action);
+}
+
+/* --------------------------------------------------- loading / error state */
 
 #loading {
   font-style: italic;
-  color: #94a3b8;
-  margin-bottom: 1rem;
+  color: var(--text-tertiary);
+  margin: 24px 32px;
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
@@ -48,271 +163,475 @@ p {
 }
 
 .error-msg {
-  color: #f87171;
-  background-color: rgba(127, 29, 29, 0.4);
-  border: 1px solid rgba(248, 113, 113, 0.2);
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  backdrop-filter: blur(8px);
-}
-
-#output-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.clipboard-card {
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #8a3324;
+  background-color: #f7e7e0;
+  border: 1px solid #dcb9a8;
+  padding: 12px 18px;
   border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(12px);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  animation: fadeIn 0.4s ease-out forwards;
+  margin: 24px 32px;
+  white-space: pre-line;
 }
 
-.clipboard-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  border-color: rgba(255, 255, 255, 0.15);
+/* ------------------------------------------------------------- main grid */
+
+.inspector-grid {
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 24px 32px;
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) 172px minmax(320px, 1fr);
+  row-gap: var(--row-gap);
+  align-items: stretch;
 }
 
-@keyframes fadeIn {
+.col-heading {
+  align-self: end;
+  padding-bottom: 2px;
+}
+
+.col-heading-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.col-heading-sub {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.col-heading-sub .mime {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-html-soft);
+}
+
+/* ----------------------------------------------------------- success banner */
+
+.banner {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--success-fill);
+  border: 1px solid var(--success-border);
+  border-radius: 12px;
+  padding: 12px 18px;
+  animation: slideIn 0.25s ease;
+}
+
+@keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(-6px);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
-.card-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+.banner-msg {
+  font-size: 14px;
+  color: var(--success-text-dark);
 }
 
-.pill {
-  background: rgba(56, 189, 248, 0.1);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s ease;
+.banner-undo {
+  background: none;
+  border: none;
+  color: var(--success-text);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  flex-shrink: 0;
 }
 
-.pill:hover {
-  background: rgba(56, 189, 248, 0.15);
-  transform: translateY(-1px);
-}
+/* ----------------------------------------------------------------- cards */
 
-.pill-size {
-  color: #94a3b8;
-  font-size: 0.75rem;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 0.1rem 0.4rem;
-  border-radius: 9999px;
-}
-
-.data-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-@media (max-width: 800px) {
-  .data-pair {
-    grid-template-columns: 1fr;
-  }
-}
-
-.pane {
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-neutral);
+  border-radius: 14px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-.pane h3 {
-  font-size: 1rem;
-  color: #e2e8f0;
-  margin-top: 0;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
+.card--derived {
+  border-color: var(--border-derived);
+}
+
+.card-head {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  row-gap: 6px;
+  gap: 10px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border-hairline);
 }
 
-.pane h3.rendered-title {
-  color: #a78bfa;
-  /* Distinct color for rendered pane title */
+/* Real clipboard MIME types: monospace. */
+.card-name-mime {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
-/* Base styles for scrollable content areas */
-.scroll-container {
-  flex-grow: 1;
-  border-radius: 8px;
+.card-name-mime.is-html {
+  color: var(--accent-html);
+}
+
+/* Derived formats: serif. */
+.card-name-derived {
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.card-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.card-savings {
+  color: var(--success-text);
+  font-weight: 700;
+}
+
+.card-note {
+  font-size: 11.5px;
+  color: var(--accent-html-soft);
+}
+
+.card-flag {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--success-text);
+}
+
+/* Rendered preview body. */
+.card-render {
+  padding: 16px 22px;
+  font-size: 14px;
+  line-height: 1.6;
+  max-height: 200px;
   overflow: auto;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  max-height: 400px;
+  flex: 1;
 }
 
-.scroll-container::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.card--html .card-render {
+  padding: 18px 22px;
+  max-height: 300px;
 }
 
-.scroll-container::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.1);
-  border-radius: 4px;
-}
-
-.scroll-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-}
-
-.scroll-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* Raw data styling (Left Pane) */
-.data-content {
-  background-color: rgba(15, 23, 42, 0.6);
-  padding: 1rem;
-  color: #a5b4fc;
-  font-family: 'Fira Code', 'Consolas', 'Courier New', monospace;
-  font-size: 13px;
-  white-space: pre-wrap;
-  word-wrap: break-word;
+.card-render ul,
+.card-render ol {
   margin: 0;
-  height: 100%;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 
-/* Rendered data styling (Right Pane) */
-.rendered-content {
-  background-color: #ffffff;
-  /* White bg for accurate rendering of HTML/Images */
-  color: #1e293b;
-  padding: 1rem;
-  min-height: 100px;
-  min-height: 100%;
+.card--html .card-render ul,
+.card--html .card-render ol {
+  gap: 8px;
 }
 
-/* Constrain rendered images */
-.rendered-content img {
+.card-render p {
+  margin: 0 0 10px;
+}
+
+.card-render p:last-child {
+  margin-bottom: 0;
+}
+
+.card-render a {
+  color: var(--action);
+}
+
+.card-render a:hover {
+  color: var(--action-hover);
+}
+
+.card-render h1,
+.card-render h2,
+.card-render h3,
+.card-render h4 {
+  font-family: var(--font-serif);
+  margin: 0 0 8px;
+}
+
+.card-render img {
   max-width: 100%;
   height: auto;
-  border-radius: 4px;
-}
-
-/* Basic Markdown styling if rendered directly */
-.rendered-content h1,
-.rendered-content h2,
-.rendered-content h3 {
-  margin-top: 0;
-  color: #0f172a;
-}
-
-.rendered-content p {
-  color: inherit;
-  margin-top: 0;
-  margin-bottom: 1rem;
-}
-
-.rendered-content a {
-  color: #2563eb;
-}
-
-.rendered-content code {
-  background: #f1f5f9;
-  padding: 0.2rem 0.4rem;
-  border-radius: 4px;
-  font-family: monospace;
-}
-
-.rendered-content pre {
-  background: #f1f5f9;
-  padding: 1rem;
   border-radius: 6px;
-  overflow-x: auto;
 }
 
-/* Markdown Table Styles */
-.rendered-content table {
-  width: 100%;
+.card-render table {
   border-collapse: collapse;
-  margin: 1rem 0;
-  font-size: 0.9em;
+  font-size: 13px;
 }
 
-.rendered-content th,
-.rendered-content td {
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  padding: 0.5rem 0.75rem;
+.card-render th,
+.card-render td {
+  border: 1px solid var(--border-neutral);
+  padding: 5px 9px;
   text-align: left;
 }
 
-.rendered-content th {
-  background: rgba(15, 23, 42, 0.05);
+.card-render th {
+  background: var(--source-bg);
   font-weight: 600;
-  color: #0f172a;
 }
 
-.rendered-content tr:nth-child(even) {
-  background: rgba(15, 23, 42, 0.02);
+.card-render code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--source-bg);
+  padding: 1px 4px;
+  border-radius: 4px;
 }
-/* Tab Styles */
-.tabbed-pane {
+
+/* Raw source body. */
+.card-source {
+  margin: 0;
+  padding: 14px 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  /* Long unbroken URLs would otherwise scroll out of the card. */
+  overflow-wrap: anywhere;
+  color: var(--text-pre);
+  background: var(--source-bg);
+  max-height: 200px;
+  overflow: auto;
+  flex: 1;
+}
+
+/* text/plain has no rendered form, so its body is always a <pre> — and it sits
+   on the card background rather than the source tint. */
+.card--plain .card-source {
+  font-size: 12.5px;
+  padding: 16px 20px;
+  background: none;
+}
+
+.card--html .card-source {
+  font-size: 11.5px;
+  line-height: 1.6;
+  padding: 16px 20px;
+  word-break: break-all;
+  max-height: 300px;
+}
+
+.card-empty {
+  padding: 16px 22px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-tertiary);
+  flex: 1;
+}
+
+/* --------------------------------------------------------- gutter actions */
+
+.gutter {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
 }
 
-.tabs-header {
-  display: flex;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 1rem;
+.gutter--first {
+  position: relative;
 }
 
-.tab-btn {
-  background: transparent;
-  color: #94a3b8;
+.replace-btn {
+  width: 100%;
+  background: var(--action);
   border: none;
-  border-bottom: 2px solid transparent;
-  padding: 0.5rem 1rem;
-  font-size: 1rem;
-  font-weight: 500;
+  color: var(--card-bg);
+  border-radius: 10px;
+  padding: 11px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  outline: none;
-  transition: all 0.2s ease;
+  box-shadow: 0 2px 5px rgba(60, 60, 20, 0.18);
 }
 
-.tab-btn:hover {
-  color: #e2e8f0;
+.replace-btn:hover {
+  background: var(--action-hover);
 }
 
-.tab-btn.active {
-  color: #a78bfa;
-  border-bottom-color: #a78bfa;
+.replace-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
 }
 
-.tab-content {
-  flex-grow: 1;
+/* Straddles the seam between the two clipboard cards. */
+.replace-both-wrap {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  transform: translateY(calc(50% + var(--row-gap-half)));
+  display: flex;
+  justify-content: center;
+  z-index: 2;
+}
+
+.replace-both-btn {
+  background: var(--action-primary);
+  border: none;
+  color: var(--card-bg);
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(60, 60, 20, 0.2);
+}
+
+.replace-both-btn:hover {
+  background: #333d29;
+}
+
+/* Done state, shared by both button kinds. */
+.replace-btn.is-done,
+.replace-both-btn.is-done {
+  background: var(--success-fill);
+  border: 1px dashed var(--success-border);
+  color: var(--success-text);
+  cursor: default;
+  box-shadow: none;
+}
+
+.replace-btn:disabled,
+.replace-both-btn:disabled {
+  background: var(--control-fill);
+  color: var(--text-tertiary);
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ----------------------------------------------------------------- extras */
+
+.extras {
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 0 32px 32px;
   display: flex;
   flex-direction: column;
+  gap: 14px;
+}
+
+.extras-title {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 10px 0 0;
+}
+
+.card--experimental {
+  border-style: dashed;
+  border-color: var(--accent-html-soft);
+}
+
+.card-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.ghost-btn {
+  background: none;
+  border: 1px solid var(--border-control);
+  color: var(--text-secondary);
+  border-radius: 99px;
+  padding: 7px 15px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ghost-btn:hover {
+  border-color: var(--action);
+  color: var(--action);
+}
+
+/* ------------------------------------------------------------- responsive */
+
+/* Two 320px columns plus the 172px gutter plus padding stops fitting around
+   860px; below that the gutter buttons become full-width rows between the
+   cards they connect. */
+@media (max-width: 860px) {
+  .inspector-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .col-heading {
+    grid-column: 1 / -1;
+    align-self: start;
+  }
+
+  .grid-spacer {
+    display: none;
+  }
+
+  .gutter {
+    padding: 0;
+  }
+
+  /* No seam to straddle in a single column — put it back in the flow. */
+  .replace-both-wrap {
+    position: static;
+    transform: none;
+    width: 100%;
+    margin-top: 6px;
+  }
+
+  .replace-both-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .app-bar {
+    padding: 14px 20px;
+  }
+
+  .inspector-grid {
+    padding: 20px;
+  }
+
+  .extras {
+    padding: 0 20px 24px;
+  }
+
+  #loading,
+  .error-msg {
+    margin: 20px;
+  }
 }
