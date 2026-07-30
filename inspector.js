@@ -1,17 +1,45 @@
+/* =========================================================================
+   Clipboard Inspector
+
+   Shows what is actually on the clipboard next to the structure-preserving
+   equivalents, and lets the user swap one or both entries for them.
+
+   Layout is a two-column comparison: the real clipboard on the left, the
+   equivalents on the right, aligned row-by-row, with the replace actions in
+   the gutter between them pointing left — Markdown replaces text/plain,
+   Simple HTML replaces text/html.
+
+   Nothing is written to the clipboard until the user asks for it; the payloads
+   read at startup are kept in memory so Undo can put them back.
+   ========================================================================= */
+
+/* ------------------------------------------------------------- formatting */
+
 function formatBytes(bytes) {
-    if (bytes === 0) return '0 bytes';
+    if (!bytes) return '0 B';
     const k = 1024;
-    const sizes = ['bytes', 'kb', 'mb', 'gb', 'tb'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), units.length - 1);
     const size = parseFloat((bytes / Math.pow(k, i)).toFixed(1));
-    return `${size} ${sizes[i]}`;
+    return `${size} ${units[i]}`;
+}
+
+function byteLength(text) {
+    return new Blob([text || '']).size;
+}
+
+/** Inline base64 images make the source pane unreadable — stand them in. */
+function redactBase64(text) {
+    if (!text) return text;
+    return text.replace(/(data:image\/[^;]+;base64,)[a-zA-Z0-9+/=]+/g, '$1[IMAGE_BINARY]');
 }
 
 /**
- * Pretty-print HTML using js-beautify for the raw data pane.
- * Tag names are uppercased for easier visual scanning; attributes are left as-is.
+ * Pretty-print HTML using js-beautify for the source pane.
+ * Clipboard HTML is uppercased so the tag soup is easier to scan; the derived
+ * Simple HTML is left lowercase, which is how we emit it.
  */
-function prettyPrintHtml(html) {
+function prettyPrintHtml(html, { uppercaseTags = false } = {}) {
     if (typeof html_beautify === 'function') {
         html = html_beautify(html, {
             indent_size: 2,
@@ -20,76 +48,85 @@ function prettyPrintHtml(html) {
             indent_inner_html: true
         });
     }
-    // Uppercase tag names only (not attributes)
-    html = html.replace(/<(\/?)([a-z][a-z0-9]*)/gi, (match, slash, tag) => {
-        return '<' + slash + tag.toUpperCase();
-    });
+    if (uppercaseTags) {
+        // Tag names only, never attributes.
+        html = html.replace(/<(\/?)([a-z][a-z0-9]*)/gi, (m, slash, tag) => '<' + slash + tag.toUpperCase());
+    }
     return html;
 }
 
-async function simulateCopyMinimalMd(clipboardItems) {
-    let htmlBlob = null;
-    let textBlob = null;
-    
-    for (const item of clipboardItems) {
-        if (item.types.includes("text/html")) {
-            htmlBlob = await item.getType("text/html");
-        }
-        if (item.types.includes("text/plain")) {
-            textBlob = await item.getType("text/plain");
-        }
-    }
+/* ----------------------------------------------------------------- state */
 
-    let markdown = "";
-    let cleanHtml = "";
-    let originalPlainText = "";
-    let sourceType = "";
-    let htmlText = "";
+const state = {
+    view: 'rendered',            // 'rendered' | 'source'
+    // Per-pane line wrapping in the source view. Off by default: long lines run
+    // off the edge and the pane scrolls, keeping the payload's real line
+    // structure readable.
+    wrap: { plain: false, html: false, markdown: false, simpleHtml: false, aria: false },
+    mdDone: false,               // text/plain has been replaced
+    htmlDone: false,             // text/html has been replaced
+    original: { plain: '', html: '' },   // as first read — for Undo
+    current: { plain: '', html: '' },    // what is on the clipboard now
+    plainPresent: false,         // did the clipboard carry a text/plain entry?
+    htmlPresent: false,
+    equivalents: { markdown: '', simpleHtml: '' },
+    derivedFrom: null,           // 'text/html' | 'text/plain' | null
+    extras: [],                  // clipboard entries that are neither text type
+    ariaPreview: null            // DOM-bypass snapshot from the background worker
+};
 
-    if (textBlob) {
-        originalPlainText = await textBlob.text();
-    }
+const anyReplaced = () => state.mdDone || state.htmlDone;
+const bothReplaced = () => state.mdDone && state.htmlDone;
+const hasMarkdown = () => !!state.equivalents.markdown;
+const hasSimpleHtml = () => !!state.equivalents.simpleHtml;
 
-    if (htmlBlob) {
-        sourceType = "HTML";
-        htmlText = await htmlBlob.text();
-        
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlText, 'text/html');
-        const tables = doc.querySelectorAll('table');
+/* ------------------------------------------------------------- derivation */
 
+/**
+ * Run the copy-minimal-md conversion over the clipboard payload.
+ *
+ * With a text/html entry this is the normal path: repair the source-specific
+ * quirks, sanitize, then Turndown for the Markdown. Without one we fall back to
+ * TSV detection over the plain text, which yields both a Markdown table and a
+ * simple HTML table.
+ *
+ * Returns null when the copy has no structure worth deriving.
+ */
+function deriveEquivalents({ html, plain, hasHtml }) {
+    if (hasHtml && html) {
+        let htmlText = html;
+        let sourceType = 'HTML';
+
+        const doc = new DOMParser().parseFromString(htmlText, 'text/html');
         let modified = false;
 
-        // Fix Google Sheets extra newlines by converting block-level divs to inline spans inside tables
-        const cells = doc.querySelectorAll('td div, th div');
-        Array.from(cells).forEach(div => {
+        // Google Sheets: block-level <div>s inside cells produce extra newlines.
+        Array.from(doc.querySelectorAll('td div, th div')).forEach(div => {
             const span = doc.createElement('span');
             span.append(...div.childNodes);
             div.replaceWith(span);
             modified = true;
         });
 
-        // Fix Google Docs wrapping entire copy in a fake bold tag
-        const fakeBolds = doc.querySelectorAll('b[style*="font-weight:normal"], b[style*="font-weight: normal"]');
-        Array.from(fakeBolds).forEach(b => {
+        // Google Docs wraps the whole copy in <b style="font-weight:normal">.
+        Array.from(doc.querySelectorAll('b[style*="font-weight:normal"], b[style*="font-weight: normal"]')).forEach(b => {
             const span = doc.createElement('span');
             span.append(...b.childNodes);
             b.replaceWith(span);
             modified = true;
         });
 
-        tables.forEach(table => {
+        // Implicit-header promotion: Turndown GFM needs a <thead> to emit a table.
+        doc.querySelectorAll('table').forEach(table => {
             const firstRow = table.rows[0];
             if (firstRow && !table.tHead) {
-                // Check if the first row is actually a header row (all th) despite missing thead
                 const isImplicitHeader = Array.from(firstRow.cells).every(cell => cell.tagName === 'TH');
-
                 if (!isImplicitHeader) {
                     const thead = doc.createElement('thead');
                     const tr = doc.createElement('tr');
                     for (let i = 0; i < firstRow.cells.length; i++) {
                         const th = doc.createElement('th');
-                        th.textContent = firstRow.cells[i]?.textContent || "";
+                        th.textContent = firstRow.cells[i]?.textContent || '';
                         tr.appendChild(th);
                     }
                     thead.appendChild(tr);
@@ -100,38 +137,34 @@ async function simulateCopyMinimalMd(clipboardItems) {
             }
         });
 
-        // Reconstruct ARIA flex/grid tables into standard HTML tables (e.g., Databricks, Notion)
+        // Reconstruct ARIA flex/grid tables into real tables (Databricks, Notion).
         const ariaRows = doc.querySelectorAll('[role="row"]');
         if (ariaRows.length > 0 && doc.querySelectorAll('table').length === 0) {
             const newTable = doc.createElement('table');
             const tbody = doc.createElement('tbody');
             let thead = null;
-            
+
             ariaRows.forEach(ariaRow => {
                 const tr = doc.createElement('tr');
                 const ariaCells = ariaRow.querySelectorAll('[role="cell"], [role="columnheader"], [role="gridcell"]');
-                
                 let isHeaderRow = false;
-                
+
                 if (ariaCells.length > 0) {
                     ariaCells.forEach(ariaCell => {
                         const isHeader = ariaCell.getAttribute('role') === 'columnheader';
                         if (isHeader) isHeaderRow = true;
-                        
                         const cell = doc.createElement(isHeader ? 'th' : 'td');
                         cell.innerHTML = ariaCell.innerHTML;
                         tr.appendChild(cell);
                     });
                 } else {
-                    // Fallback for generic div children
-                    const children = Array.from(ariaRow.children);
-                    children.forEach((child) => {
+                    Array.from(ariaRow.children).forEach(child => {
                         const cell = doc.createElement('td');
                         cell.innerHTML = child.innerHTML;
                         tr.appendChild(cell);
                     });
                 }
-                
+
                 if (isHeaderRow) {
                     if (!thead) thead = doc.createElement('thead');
                     thead.appendChild(tr);
@@ -139,12 +172,11 @@ async function simulateCopyMinimalMd(clipboardItems) {
                     tbody.appendChild(tr);
                 }
             });
-            
+
             if (thead) {
                 newTable.appendChild(thead);
             } else if (tbody.firstChild) {
-                // Turndown GFM requires a thead to render a Markdown table.
-                // If we didn't find specific columnheader roles, promote the first row.
+                // No columnheader roles found — promote the first row instead.
                 thead = doc.createElement('thead');
                 const firstRow = tbody.firstChild;
                 const tr = doc.createElement('tr');
@@ -158,705 +190,709 @@ async function simulateCopyMinimalMd(clipboardItems) {
                 firstRow.remove();
             }
             newTable.appendChild(tbody);
-            
+
             const firstRowParent = ariaRows[0].parentElement;
             if (firstRowParent) {
-                 firstRowParent.insertBefore(newTable, ariaRows[0]);
+                firstRowParent.insertBefore(newTable, ariaRows[0]);
             } else {
-                 doc.body.prepend(newTable);
+                doc.body.prepend(newTable);
             }
-            
-            // Clean up original ARIA structure to prevent duplicates
+
             ariaRows.forEach(row => row.remove());
             modified = true;
-            sourceType = "HTML (Extracted ARIA Table)";
+            sourceType = 'HTML (Extracted ARIA Table)';
         }
 
-        if (modified) {
-            htmlText = doc.body.innerHTML;
-        }
+        if (modified) htmlText = doc.body.innerHTML;
 
+        let cleanHtml = htmlText;
         if (typeof DOMPurify !== 'undefined') {
             cleanHtml = DOMPurify.sanitize(htmlText, {
                 ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'u', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'br', 'hr', 'blockquote', 'code', 'pre'],
                 ALLOWED_ATTR: ['href', 'src', 'alt', 'title'],
                 ALLOW_DATA_ATTR: false
             });
-        } else {
-            cleanHtml = htmlText;
         }
 
-        const turndownService = new TurndownService({
-            headingStyle: 'atx',
-            codeBlockStyle: 'fenced'
-        });
+        const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
         if (typeof turndownPluginGfm !== 'undefined') {
             turndownService.use(turndownPluginGfm.gfm);
         }
 
-        markdown = turndownService.turndown(cleanHtml);
-
-        // Post-process to fix excess whitespace within markdown links
-        markdown = markdown.replace(/\[([\s\S]+?)\]\((.*?)\)/g, (match, innerText, href) => {
+        let markdown = turndownService.turndown(cleanHtml);
+        // Collapse the whitespace Turndown leaves inside link text.
+        markdown = markdown.replace(/\[([\s\S]+?)\]\((.*?)\)/g, (m, innerText, href) => {
             return `[${innerText.trim().replace(/\s+/g, ' ')}](${href})`;
         });
 
-        if (!textBlob) {
-            originalPlainText = markdown;
-        }
-    } else if (originalPlainText) {
-        const detection = TsvDetector.detect({ hasHtml: false, plainText: originalPlainText });
+        return { markdown, simpleHtml: cleanHtml, derivedFrom: 'text/html', sourceType };
+    }
+
+    if (plain) {
+        const detection = TsvDetector.detect({ hasHtml: false, plainText: plain });
         if (!detection) return null;
-        sourceType = detection.sourceType;
-        markdown = detection.markdown;
-        cleanHtml = detection.simpleHtml;
-        await TsvDetector.fire(detection);
-    } else {
-        return null; // Nothing to simulate
+        return {
+            markdown: detection.markdown,
+            simpleHtml: detection.simpleHtml,
+            derivedFrom: 'text/plain',
+            sourceType: detection.sourceType
+        };
     }
 
-    // Create the UI Card for simulation
-    const card = document.createElement('div');
-    card.className = 'clipboard-card';
-    card.style.border = '2px dashed #4b5563'; // Add dashed border to distinguish it
-
-    const header = document.createElement('div');
-    header.className = 'card-header';
-    
-    const titleText = document.createElement('h2');
-    titleText.style.margin = '0';
-    titleText.textContent = 'Simulated';
-    
-    const sourceBadge = document.createElement('span');
-    sourceBadge.style.color = '#94a3b8';
-    sourceBadge.style.marginLeft = '12px';
-    sourceBadge.style.fontSize = '0.9rem';
-    sourceBadge.style.fontWeight = 'normal';
-    sourceBadge.textContent = 'from ' + sourceType;
-    titleText.appendChild(sourceBadge);
-    
-    header.appendChild(titleText);
-    card.appendChild(header);
-
-    // Create the data section
-    const dataSectionOuter = document.createElement('div');
-    dataSectionOuter.style.marginTop = '1rem';
-
-    const mdHeaderContainer = document.createElement('div');
-    mdHeaderContainer.style.display = 'flex';
-    mdHeaderContainer.style.justifyContent = 'space-between';
-    mdHeaderContainer.style.alignItems = 'center';
-    mdHeaderContainer.style.marginBottom = '0.5rem';
-
-    const mdHeader = document.createElement('h3');
-    mdHeader.style.color = '#e2e8f0';
-    mdHeader.style.margin = '0';
-    mdHeader.style.fontSize = '1.1rem';
-    const mdSize = formatBytes(new Blob([markdown || '']).size);
-    mdHeader.innerHTML = 'Simulated: Markdown &nbsp;&nbsp;&nbsp; <span style="opacity: 0.6; font-size: 0.9em; font-weight: normal;">' + mdSize + '</span>';
-    mdHeaderContainer.appendChild(mdHeader);
-
-    const mdCopyBtn = document.createElement('button');
-    mdCopyBtn.textContent = 'Copy to Clipboard';
-    mdCopyBtn.style.cursor = 'pointer';
-    mdCopyBtn.style.padding = '4px 8px';
-    mdCopyBtn.style.backgroundColor = '#3b82f6';
-    mdCopyBtn.style.color = '#fff';
-    mdCopyBtn.style.border = 'none';
-    mdCopyBtn.style.borderRadius = '4px';
-    mdCopyBtn.onclick = async () => {
-        try {
-            await navigator.clipboard.write([
-                new ClipboardItem({
-                    "text/plain": new Blob([markdown || ""], { type: "text/plain" })
-                })
-            ]);
-            mdCopyBtn.textContent = 'Copied!';
-            setTimeout(() => {
-                mdCopyBtn.textContent = 'Copy to Clipboard';
-                readClipboard();
-            }, 500);
-        } catch (err) {
-            console.error("Failed to copy:", err);
-            mdCopyBtn.textContent = 'Error';
-            setTimeout(() => mdCopyBtn.textContent = 'Copy to Clipboard', 2000);
-        }
-    };
-    mdHeaderContainer.appendChild(mdCopyBtn);
-    dataSectionOuter.appendChild(mdHeaderContainer);
-
-    const dataPair = document.createElement('div');
-    dataPair.className = 'data-pair';
-
-    // Empty Left Pane
-    const emptyLeftPane = document.createElement('div');
-    emptyLeftPane.className = 'pane';
-    dataPair.appendChild(emptyLeftPane);
-
-    // Tabbed Right Pane
-    const tabbedPane = document.createElement('div');
-    tabbedPane.className = 'tabbed-pane';
-
-    const tabsHeader = document.createElement('div');
-    tabsHeader.className = 'tabs-header';
-
-    const renderBtn = document.createElement('button');
-    renderBtn.className = 'tab-btn active';
-    renderBtn.textContent = 'Rendered View';
-
-    const rawBtn = document.createElement('button');
-    rawBtn.className = 'tab-btn';
-    rawBtn.textContent = 'Raw Markdown';
-
-    tabsHeader.appendChild(renderBtn);
-    tabsHeader.appendChild(rawBtn);
-    tabbedPane.appendChild(tabsHeader);
-
-    const tabContentContainer = document.createElement('div');
-    tabContentContainer.className = 'tab-content';
-    tabbedPane.appendChild(tabContentContainer);
-
-    const rawScroll = document.createElement('div');
-    rawScroll.className = 'scroll-container';
-    rawScroll.style.display = 'none'; // Hidden by default
-    const dataContent = document.createElement('pre');
-    dataContent.className = 'data-content';
-    let displayMarkdown = markdown || '[Empty String]';
-    displayMarkdown = displayMarkdown.replace(/(data:image\/[^;]+;base64,)[a-zA-Z0-9+/=]+/g, '$1[IMAGE_BINARY]');
-    dataContent.textContent = displayMarkdown;
-    rawScroll.appendChild(dataContent);
-
-    // Rendered View Pane (Now just content)
-
-    const renderedScroll = document.createElement('div');
-    renderedScroll.className = 'scroll-container';
-    const renderedContent = document.createElement('div');
-    renderedContent.className = 'rendered-content';
-    
-    if (typeof marked !== 'undefined') {
-        renderedContent.innerHTML = marked.parse(markdown, { breaks: true });
-    } else {
-        renderedContent.textContent = markdown;
-    }
-
-    renderedScroll.appendChild(renderedContent);
-    tabContentContainer.appendChild(renderedScroll);
-    tabContentContainer.appendChild(rawScroll);
-
-    // Tab switching logic
-    renderBtn.onclick = () => {
-        renderBtn.classList.add('active');
-        rawBtn.classList.remove('active');
-        rawScroll.style.display = 'none';
-        renderedScroll.style.display = 'block';
-    };
-
-    rawBtn.onclick = () => {
-        rawBtn.classList.add('active');
-        renderBtn.classList.remove('active');
-        renderedScroll.style.display = 'none';
-        rawScroll.style.display = 'block';
-    };
-
-    dataPair.appendChild(tabbedPane);
-    dataSectionOuter.appendChild(dataPair);
-    card.appendChild(dataSectionOuter);
-
-    if (cleanHtml && typeof DOMPurify !== 'undefined') {
-        const simpleOuter = document.createElement('div');
-        simpleOuter.style.marginTop = '2rem';
-        simpleOuter.style.borderTop = '1px solid #334155';
-        simpleOuter.style.paddingTop = '1rem';
-        
-        const simpleHeaderContainer = document.createElement('div');
-        simpleHeaderContainer.style.display = 'flex';
-        simpleHeaderContainer.style.justifyContent = 'space-between';
-        simpleHeaderContainer.style.alignItems = 'center';
-        simpleHeaderContainer.style.marginBottom = '0.5rem';
-
-        const simpleHeader = document.createElement('h3');
-        simpleHeader.style.color = '#e2e8f0';
-        simpleHeader.style.margin = '0';
-        simpleHeader.style.fontSize = '1.1rem';
-        const simpleSize = formatBytes(new Blob([cleanHtml || '']).size);
-        simpleHeader.innerHTML = 'Simulated: Simple HTML &nbsp;&nbsp;&nbsp; <span style="opacity: 0.6; font-size: 0.9em; font-weight: normal;">' + simpleSize + '</span>';
-        simpleHeaderContainer.appendChild(simpleHeader);
-
-        const simpleCopyBtn = document.createElement('button');
-        simpleCopyBtn.textContent = 'Copy to Clipboard';
-        simpleCopyBtn.style.cursor = 'pointer';
-        simpleCopyBtn.style.padding = '4px 8px';
-        simpleCopyBtn.style.backgroundColor = '#3b82f6';
-        simpleCopyBtn.style.color = '#fff';
-        simpleCopyBtn.style.border = 'none';
-        simpleCopyBtn.style.borderRadius = '4px';
-        simpleCopyBtn.onclick = async () => {
-            try {
-                await navigator.clipboard.write([
-                    new ClipboardItem({
-                        "text/html": new Blob([cleanHtml || ""], { type: "text/html" }),
-                        "text/plain": new Blob([originalPlainText || ""], { type: "text/plain" })
-                    })
-                ]);
-                simpleCopyBtn.textContent = 'Copied!';
-                setTimeout(() => {
-                    simpleCopyBtn.textContent = 'Copy to Clipboard';
-                    readClipboard();
-                }, 500);
-            } catch (err) {
-                console.error("Failed to copy:", err);
-                simpleCopyBtn.textContent = 'Error';
-                setTimeout(() => simpleCopyBtn.textContent = 'Copy to Clipboard', 2000);
-            }
-        };
-        simpleHeaderContainer.appendChild(simpleCopyBtn);
-        simpleOuter.appendChild(simpleHeaderContainer);
-
-        const simpleDataPair = document.createElement('div');
-        simpleDataPair.className = 'data-pair';
-
-        // Empty Left Pane for Simple HTML
-        const simpleEmptyLeft = document.createElement('div');
-        simpleEmptyLeft.className = 'pane';
-        simpleDataPair.appendChild(simpleEmptyLeft);
-
-        // Tabbed Right Pane for Simple HTML
-        const simpleTabbedPane = document.createElement('div');
-        simpleTabbedPane.className = 'tabbed-pane';
-
-        const simpleTabsHeader = document.createElement('div');
-        simpleTabsHeader.className = 'tabs-header';
-
-        const simpleRenderBtn = document.createElement('button');
-        simpleRenderBtn.className = 'tab-btn active';
-        simpleRenderBtn.textContent = 'Rendered HTML';
-
-        const simpleRawBtn = document.createElement('button');
-        simpleRawBtn.className = 'tab-btn';
-        simpleRawBtn.textContent = 'Simple HTML';
-
-        simpleTabsHeader.appendChild(simpleRenderBtn);
-        simpleTabsHeader.appendChild(simpleRawBtn);
-        simpleTabbedPane.appendChild(simpleTabsHeader);
-
-        const simpleTabContentContainer = document.createElement('div');
-        simpleTabContentContainer.className = 'tab-content';
-        simpleTabbedPane.appendChild(simpleTabContentContainer);
-
-        const simpleRawScroll = document.createElement('div');
-        simpleRawScroll.className = 'scroll-container';
-        simpleRawScroll.style.display = 'none'; // Hidden by default
-        const simpleDataContent = document.createElement('pre');
-        simpleDataContent.className = 'data-content';
-        let displayCleanHtml = cleanHtml || '[Empty String]';
-        displayCleanHtml = displayCleanHtml.replace(/(data:image\/[^;]+;base64,)[a-zA-Z0-9+/=]+/g, '$1[IMAGE_BINARY]');
-        simpleDataContent.textContent = prettyPrintHtml(displayCleanHtml);
-        simpleRawScroll.appendChild(simpleDataContent);
-        const simpleRenderedScroll = document.createElement('div');
-        simpleRenderedScroll.className = 'scroll-container';
-        const simpleRenderedContent = document.createElement('div');
-        simpleRenderedContent.className = 'rendered-content';
-        
-        const simpleShadowHost = document.createElement('div');
-        const simpleShadowRoot = simpleShadowHost.attachShadow({ mode: 'closed' });
-        simpleShadowRoot.innerHTML = cleanHtml;
-        simpleRenderedContent.appendChild(simpleShadowHost);
-        
-        simpleRenderedScroll.appendChild(simpleRenderedContent);
-        simpleTabContentContainer.appendChild(simpleRenderedScroll);
-        simpleTabContentContainer.appendChild(simpleRawScroll);
-
-        // Tab switching logic for Simple HTML
-        simpleRenderBtn.onclick = () => {
-            simpleRenderBtn.classList.add('active');
-            simpleRawBtn.classList.remove('active');
-            simpleRawScroll.style.display = 'none';
-            simpleRenderedScroll.style.display = 'block';
-        };
-
-        simpleRawBtn.onclick = () => {
-            simpleRawBtn.classList.add('active');
-            simpleRenderBtn.classList.remove('active');
-            simpleRenderedScroll.style.display = 'none';
-            simpleRawScroll.style.display = 'block';
-        };
-
-        simpleDataPair.appendChild(simpleTabbedPane);
-        simpleOuter.appendChild(simpleDataPair);
-        card.appendChild(simpleOuter);
-    }
-
-    return card;
+    return null;
 }
 
-function buildAriaBypassCard(ariaPreview) {
-    const card = document.createElement('div');
-    card.className = 'clipboard-card';
-    card.style.border = '2px dashed #d97706'; // amber — distinct from simulated's grey
+/* -------------------------------------------------------------- clipboard */
 
-    const header = document.createElement('div');
-    header.className = 'card-header';
-
-    const titleText = document.createElement('h2');
-    titleText.style.margin = '0';
-    titleText.textContent = 'Experimental: DOM Bypass';
-
-    const sourceBadge = document.createElement('span');
-    sourceBadge.style.color = '#94a3b8';
-    sourceBadge.style.marginLeft = '12px';
-    sourceBadge.style.fontSize = '0.9rem';
-    sourceBadge.style.fontWeight = 'normal';
-    sourceBadge.textContent = `${ariaPreview.cellCount} cells, ${ariaPreview.rowCount} rows · ${ariaPreview.strategy ?? 'aria-selected'}`;
-    titleText.appendChild(sourceBadge);
-
-    header.appendChild(titleText);
-    card.appendChild(header);
-
-    // Convert the reconstructed table HTML to Markdown via Turndown GFM
-    let markdown = '';
-    if (typeof TurndownService !== 'undefined') {
-        const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-        if (typeof turndownPluginGfm !== 'undefined') td.use(turndownPluginGfm.gfm);
-        markdown = td.turndown(ariaPreview.html);
-        console.log('Inspector (DOM Bypass): Converted table HTML to Markdown:', markdown);
-    } else {
-        console.warn('Inspector (DOM Bypass): TurndownService not available — markdown will be empty.');
-    }
-
-    const dataSectionOuter = document.createElement('div');
-    dataSectionOuter.style.marginTop = '1rem';
-
-    const mdHeaderContainer = document.createElement('div');
-    mdHeaderContainer.style.display = 'flex';
-    mdHeaderContainer.style.justifyContent = 'space-between';
-    mdHeaderContainer.style.alignItems = 'center';
-    mdHeaderContainer.style.marginBottom = '0.5rem';
-
-    const mdHeader = document.createElement('h3');
-    mdHeader.style.color = '#e2e8f0';
-    mdHeader.style.margin = '0';
-    mdHeader.style.fontSize = '1.1rem';
-    const mdSize = formatBytes(new Blob([markdown]).size);
-    mdHeader.innerHTML = 'DOM Bypass: Markdown &nbsp;&nbsp;&nbsp; <span style="opacity: 0.6; font-size: 0.9em; font-weight: normal;">' + mdSize + '</span>';
-    mdHeaderContainer.appendChild(mdHeader);
-
-    const mdCopyBtn = document.createElement('button');
-    mdCopyBtn.textContent = 'Copy to Clipboard';
-    mdCopyBtn.style.cssText = 'cursor:pointer;padding:4px 8px;background:#d97706;color:#fff;border:none;border-radius:4px;';
-    mdCopyBtn.onclick = async () => {
-        try {
-            await navigator.clipboard.writeText(markdown);
-            mdCopyBtn.textContent = 'Copied!';
-            setTimeout(() => { mdCopyBtn.textContent = 'Copy to Clipboard'; }, 1500);
-        } catch (err) {
-            mdCopyBtn.textContent = 'Error';
-            setTimeout(() => { mdCopyBtn.textContent = 'Copy to Clipboard'; }, 2000);
-        }
-    };
-    mdHeaderContainer.appendChild(mdCopyBtn);
-    dataSectionOuter.appendChild(mdHeaderContainer);
-
-    const dataPair = document.createElement('div');
-    dataPair.className = 'data-pair';
-
-    const emptyLeft = document.createElement('div');
-    emptyLeft.className = 'pane';
-    dataPair.appendChild(emptyLeft);
-
-    const tabbedPane = document.createElement('div');
-    tabbedPane.className = 'tabbed-pane';
-
-    const tabsHeader = document.createElement('div');
-    tabsHeader.className = 'tabs-header';
-
-    const renderBtn = document.createElement('button');
-    renderBtn.className = 'tab-btn active';
-    renderBtn.textContent = 'Rendered View';
-
-    const rawBtn = document.createElement('button');
-    rawBtn.className = 'tab-btn';
-    rawBtn.textContent = 'Raw Markdown';
-
-    tabsHeader.appendChild(renderBtn);
-    tabsHeader.appendChild(rawBtn);
-    tabbedPane.appendChild(tabsHeader);
-
-    const tabContent = document.createElement('div');
-    tabContent.className = 'tab-content';
-    tabbedPane.appendChild(tabContent);
-
-    const rawScroll = document.createElement('div');
-    rawScroll.className = 'scroll-container';
-    rawScroll.style.display = 'none';
-    const dataContent = document.createElement('pre');
-    dataContent.className = 'data-content';
-    dataContent.textContent = markdown || '[Empty]';
-    rawScroll.appendChild(dataContent);
-
-    const renderedScroll = document.createElement('div');
-    renderedScroll.className = 'scroll-container';
-    const renderedContent = document.createElement('div');
-    renderedContent.className = 'rendered-content';
-    if (typeof marked !== 'undefined') {
-        renderedContent.innerHTML = marked.parse(markdown, { breaks: true });
-    } else {
-        renderedContent.textContent = markdown;
-    }
-    renderedScroll.appendChild(renderedContent);
-
-    tabContent.appendChild(renderedScroll);
-    tabContent.appendChild(rawScroll);
-
-    renderBtn.onclick = () => {
-        renderBtn.classList.add('active'); rawBtn.classList.remove('active');
-        rawScroll.style.display = 'none'; renderedScroll.style.display = 'block';
-    };
-    rawBtn.onclick = () => {
-        rawBtn.classList.add('active'); renderBtn.classList.remove('active');
-        renderedScroll.style.display = 'none'; rawScroll.style.display = 'block';
-    };
-
-    dataPair.appendChild(tabbedPane);
-    dataSectionOuter.appendChild(dataPair);
-    card.appendChild(dataSectionOuter);
-
-    return card;
+/**
+ * Write both entries in a single ClipboardItem — the only reliable way to set
+ * text/plain and text/html together. The unchanged entry is carried through so
+ * it survives the write.
+ */
+async function writeClipboard({ plain, html, includePlain, includeHtml }) {
+    const payload = {};
+    if (includePlain) payload['text/plain'] = new Blob([plain || ''], { type: 'text/plain' });
+    if (includeHtml) payload['text/html'] = new Blob([html || ''], { type: 'text/html' });
+    if (Object.keys(payload).length === 0) return;
+    await navigator.clipboard.write([new ClipboardItem(payload)]);
 }
 
+async function applyReplace({ md, html: replaceHtml }) {
+    const nextPlain = md ? state.equivalents.markdown : state.current.plain;
+    const nextHtml = replaceHtml ? state.equivalents.simpleHtml : state.current.html;
+    // Replacing an entry creates it even if the copy had none; an entry the copy
+    // never carried is not conjured out of nothing.
+    const includePlain = md || state.plainPresent || state.mdDone;
+    const includeHtml = replaceHtml || state.htmlPresent || state.htmlDone;
+
+    try {
+        await writeClipboard({ plain: nextPlain, html: nextHtml, includePlain, includeHtml });
+    } catch (err) {
+        console.error('Inspector: clipboard write failed:', err);
+        showError(`Could not write to the clipboard: ${err.message}\nMake sure this window is focused.`);
+        return;
+    }
+
+    state.current = { plain: nextPlain, html: nextHtml };
+    if (md) state.mdDone = true;
+    if (replaceHtml) state.htmlDone = true;
+    clearError();
+    render();
+}
+
+async function undoReplace() {
+    try {
+        await writeClipboard({
+            plain: state.original.plain,
+            html: state.original.html,
+            includePlain: state.plainPresent,
+            includeHtml: state.htmlPresent
+        });
+    } catch (err) {
+        console.error('Inspector: clipboard undo failed:', err);
+        showError(`Could not restore the clipboard: ${err.message}\nMake sure this window is focused.`);
+        return;
+    }
+
+    state.current = { plain: state.original.plain, html: state.original.html };
+    state.mdDone = false;
+    state.htmlDone = false;
+    clearError();
+    render();
+}
+
+/**
+ * Read both clipboard entries, derive the equivalents, and reset replaced state.
+ * The DOM-bypass snapshot is fetched once and cached — the background worker
+ * clears it on read, so a re-read must not go looking for it again.
+ */
 async function readClipboard() {
-    const containerEl = document.getElementById('output-container');
-    const errorEl = document.getElementById('error');
     const loadingEl = document.getElementById('loading');
 
     try {
-        // Requires focus. Depending on exact timing, we might need a tiny delay or it just works immediately.
         const clipboardItems = await navigator.clipboard.read();
+        if (clipboardItems.length === 0) throw new Error('Clipboard is empty.');
 
-        if (clipboardItems.length === 0) {
-            throw new Error("Clipboard is empty.");
-        }
+        let plain = '';
+        let html = '';
+        let plainPresent = false;
+        let htmlPresent = false;
+        const extras = [];
 
-        containerEl.innerHTML = ''; // Clear existing output if any
-
-        let simCard = null;
-        try {
-            simCard = await simulateCopyMinimalMd(clipboardItems);
-        } catch (e) {
-            console.error("Simulation failed:", e);
-        }
-
-        for (const [index, item] of clipboardItems.entries()) {
-            const card = document.createElement('div');
-            card.className = 'clipboard-card';
-
-            // Header for Badges
-            const header = document.createElement('div');
-            header.className = 'card-header';
-
-            // Store content blocks to append after header
-            const contentBlocks = [];
-
+        for (const item of clipboardItems) {
             for (const type of item.types) {
-                const pill = document.createElement('div');
-                pill.className = 'pill';
-                pill.style.display = 'none';
-
-                // --- Outer Section wrapper ---
-                const dataSectionOuter = document.createElement('div');
-                dataSectionOuter.style.marginTop = '1rem';
-
-                const dataPair = document.createElement('div');
-                dataPair.className = 'data-pair';
-
-                // --- Left Pane (Empty Space) ---
-                const emptyLeftPane = document.createElement('div');
-                emptyLeftPane.className = 'pane';
-                const typeHeaderContainer = document.createElement('div');
-                emptyLeftPane.appendChild(typeHeaderContainer);
-                dataPair.appendChild(emptyLeftPane);
-
-                // --- Tabbed Right Pane ---
-                const tabbedPane = document.createElement('div');
-                tabbedPane.className = 'tabbed-pane';
-
-                const tabsHeader = document.createElement('div');
-                tabsHeader.className = 'tabs-header';
-
-                const renderBtn = document.createElement('button');
-                renderBtn.className = 'tab-btn active';
-                renderBtn.textContent = 'Rendered View';
-
-                const rawBtn = document.createElement('button');
-                rawBtn.className = 'tab-btn';
-                rawBtn.textContent = 'Raw Data';
-
-                tabsHeader.appendChild(renderBtn);
-                tabsHeader.appendChild(rawBtn);
-                tabbedPane.appendChild(tabsHeader);
-
-                const tabContentContainer = document.createElement('div');
-                tabContentContainer.className = 'tab-content';
-                tabbedPane.appendChild(tabContentContainer);
-
-                const rawScroll = document.createElement('div');
-                rawScroll.className = 'scroll-container';
-                rawScroll.style.display = 'none'; // Hidden by default
-                const dataContent = document.createElement('pre');
-                dataContent.className = 'data-content';
-                rawScroll.appendChild(dataContent);
-                const renderedScroll = document.createElement('div');
-                renderedScroll.className = 'scroll-container';
-                const renderedContent = document.createElement('div');
-                renderedContent.className = 'rendered-content';
-                renderedScroll.appendChild(renderedContent);
-                tabContentContainer.appendChild(renderedScroll);
-                tabContentContainer.appendChild(rawScroll);
-
-                // Tab switching logic for main items
-                renderBtn.onclick = () => {
-                    renderBtn.classList.add('active');
-                    rawBtn.classList.remove('active');
-                    rawScroll.style.display = 'none';
-                    renderedScroll.style.display = 'block';
-                };
-
-                rawBtn.onclick = () => {
-                    rawBtn.classList.add('active');
-                    renderBtn.classList.remove('active');
-                    renderedScroll.style.display = 'none';
-                    rawScroll.style.display = 'block';
-                };
-
-                dataPair.appendChild(tabbedPane);
-                dataSectionOuter.appendChild(dataPair);
-
                 try {
                     const blob = await item.getType(type);
-                    const sizeStr = formatBytes(blob.size);
-
-                    const leftHeaderText = document.createElement('h3');
-                    leftHeaderText.style.marginTop = '0';
-                    leftHeaderText.innerHTML = type + ' &nbsp;&nbsp;&nbsp; <span style="opacity: 0.6; font-size: 0.9em; font-weight: normal;">' + sizeStr + '</span>';
-                    typeHeaderContainer.appendChild(leftHeaderText);
-
-                    if (type.startsWith('image/')) {
-                        dataContent.textContent = '[IMAGE_BINARY]';
-
-                        // Render Image
-                        const img = document.createElement('img');
-                        img.src = URL.createObjectURL(blob);
-                        renderedContent.appendChild(img);
+                    if (type === 'text/plain') {
+                        plain = await blob.text();
+                        plainPresent = true;
                     } else if (type === 'text/html') {
-                        let text = await blob.text();
-                        if (text) {
-                            text = text.replace(/(data:image\/[^;]+;base64,)[a-zA-Z0-9+/=]+/g, '$1[IMAGE_BINARY]');
-                        }
-                        dataContent.textContent = prettyPrintHtml(text) || '[Empty String]';
-
-                        // Render HTML using Shadow DOM for isolation
-                        const shadowHost = document.createElement('div');
-                        const shadowRoot = shadowHost.attachShadow({ mode: 'closed' });
-                        const originalText = await blob.text();
-                        shadowRoot.innerHTML = originalText;
-                        renderedContent.appendChild(shadowHost);
-                    } else if (type === 'text/plain') {
-                        let text = await blob.text();
-                        if (text) {
-                            text = text.replace(/(data:image\/[^;]+;base64,)[a-zA-Z0-9+/=]+/g, '$1[IMAGE_BINARY]');
-                        }
-                        dataContent.textContent = text || '[Empty String]';
-
-                        // Render Markdown (basic heuristic)
-                        let renderedHtml = text || '';
-                        const isMarkdown = /^(#|\*|-|>|`|\|)/m.test(text) || /\*\*.*\*\*/.test(text) || /\[.*\]\(.*\)/.test(text) || /\|.*\|/.test(text);
-
-                        if (isMarkdown && typeof marked !== 'undefined') {
-                            // Use marked library if available for robust parsing (handles tables, etc)
-                            renderedHtml = marked.parse(text, { breaks: true });
-                        } else {
-                            // Plain text fallback
-                            renderedHtml = renderedHtml.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/gim, '<br />');
-                        }
-                        renderedContent.innerHTML = renderedHtml;
+                        html = await blob.text();
+                        htmlPresent = true;
                     } else {
-                        // Fallback handling
-                        let text = await blob.text();
-                        if (text) {
-                            text = text.replace(/(data:image\/[^;]+;base64,)[a-zA-Z0-9+/=]+/g, '$1[IMAGE_BINARY]');
-                        }
-                        dataContent.textContent = text || '[Empty String]';
-                        renderedContent.textContent = 'Rendering not supported for this type.';
+                        extras.push({ type, blob });
                     }
                 } catch (e) {
-                    dataContent.textContent = `[Error reading blob: ${e.message}]`;
-                    renderedContent.textContent = `[Error reading rendering]`;
-                    
-                    const leftHeaderText = document.createElement('h3');
-                    leftHeaderText.style.marginTop = '0';
-                    leftHeaderText.innerHTML = type + ' &nbsp;&nbsp;&nbsp; <span style="opacity: 0.6; font-size: 0.9em; font-weight: normal;">unknown size</span>';
-                    typeHeaderContainer.appendChild(leftHeaderText);
+                    console.warn(`Inspector: could not read ${type}:`, e.message);
                 }
-
-                contentBlocks.push(dataSectionOuter);
-                header.appendChild(pill);
             }
-
-            // Only append header if it actually has visible content (no pills are visible anymore)
-            // But we still append contentBlocks
-            // card.appendChild(header); // Removed deliberately to hide the empty grey bar
-            contentBlocks.forEach(block => card.appendChild(block));
-            containerEl.appendChild(card);
         }
 
-        if (simCard) {
-            containerEl.appendChild(simCard);
-        }
+        state.original = { plain, html };
+        state.current = { plain, html };
+        state.plainPresent = plainPresent;
+        state.htmlPresent = htmlPresent;
+        state.mdDone = false;
+        state.htmlDone = false;
+        state.extras = extras;
 
+        let derived = null;
         try {
-            console.log('Inspector: Requesting aria-preview data from background...');
-            const ariaPreview = await chrome.runtime.sendMessage({ type: 'get-aria-preview' });
-            if (ariaPreview) {
-                console.log(`Inspector: Received aria-preview — ${ariaPreview.cellCount} cells across ${ariaPreview.rowCount} rows. Rendering DOM Bypass card.`);
-                containerEl.appendChild(buildAriaBypassCard(ariaPreview));
-            } else {
-                console.log('Inspector: No aria-selected data from background (no cells were selected, or page was not injectable).');
-            }
+            derived = deriveEquivalents({ html, plain, hasHtml: htmlPresent });
         } catch (e) {
-            console.warn('Inspector: Could not retrieve aria-preview from background:', e.message);
+            console.error('Inspector: derivation failed:', e);
+        }
+        state.equivalents = derived
+            ? { markdown: derived.markdown, simpleHtml: derived.simpleHtml }
+            : { markdown: '', simpleHtml: '' };
+        state.derivedFrom = derived ? derived.derivedFrom : null;
+
+        if (state.ariaPreview === null) {
+            state.ariaPreview = await fetchAriaPreview();
         }
 
         loadingEl.style.display = 'none';
-
+        clearError();
+        render();
     } catch (err) {
         loadingEl.style.display = 'none';
-        errorEl.style.display = 'block';
-        errorEl.textContent = `Error reading clipboard: ${err.message}\nMake sure the window is focused and the extension has clipboardRead permissions.`;
+        showError(`Error reading clipboard: ${err.message}\nMake sure the window is focused and the extension has clipboardRead permissions.`);
         console.error(err);
     }
 }
 
-// Auto-write simulated simple HTML to the clipboard whenever the TSV state is detected,
-// so the user doesn't have to click the per-card "Copy" button.
-TsvDetector.addListener(async (d) => {
-    await navigator.clipboard.write([
-        new ClipboardItem({
-            "text/plain": new Blob([d.plainText], { type: "text/plain" }),
-            "text/html": new Blob([d.simpleHtml], { type: "text/html" })
-        })
-    ]);
-});
+async function fetchAriaPreview() {
+    try {
+        console.log('Inspector: Requesting aria-preview data from background...');
+        const preview = await chrome.runtime.sendMessage({ type: 'get-aria-preview' });
+        if (preview) {
+            console.log(`Inspector: Received aria-preview — ${preview.cellCount} cells across ${preview.rowCount} rows.`);
+        } else {
+            console.log('Inspector: No aria-selected data from background (no cells selected, or page not injectable).');
+        }
+        return preview || false;
+    } catch (e) {
+        console.warn('Inspector: Could not retrieve aria-preview from background:', e.message);
+        return false;
+    }
+}
 
-// Execute when DOM is fully loaded.
-// The Async Clipboard API requires document focus. Fire immediately if we already
-// have it (e.g. the tab was opened in the foreground), otherwise wait for the
-// first focus event — no arbitrary timer needed.
+function showError(message) {
+    const errorEl = document.getElementById('error');
+    errorEl.style.display = 'block';
+    errorEl.textContent = message;
+}
+
+function clearError() {
+    const errorEl = document.getElementById('error');
+    errorEl.style.display = 'none';
+    errorEl.textContent = '';
+}
+
+/* ------------------------------------------------------------ dom helpers */
+
+function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+}
+
+/* Two uprights flanking a return arrow — the conventional line-wrap glyph.
+   A module constant, never built from clipboard data. */
+const WRAP_ICON =
+    '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M2.6 2.8v10.4M13.4 2.8v10.4"/>' +
+    '<path d="M5.6 6h4.1a2.1 2.1 0 0 1 0 4.2H7.1"/>' +
+    '<path d="M8.6 8.6 7 10.2l1.6 1.6"/>' +
+    '</svg>';
+
+/**
+ * Toggles wrapping for one source pane. Lives at the top-right of the card
+ * header, directly above the pane it controls.
+ */
+function buildWrapToggle(key) {
+    const on = state.wrap[key];
+    const button = el('button', on ? 'wrap-btn is-on' : 'wrap-btn');
+    button.type = 'button';
+    button.innerHTML = WRAP_ICON;
+
+    const label = on ? 'Stop wrapping lines' : 'Wrap lines';
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-pressed', String(on));
+
+    button.addEventListener('click', () => {
+        state.wrap[key] = !state.wrap[key];
+        render();
+    });
+    return button;
+}
+
+/** A source <pre> that honours the pane's own wrap setting. */
+function buildSourcePre(key, text) {
+    return el('pre', state.wrap[key] ? 'card-source is-wrapped' : 'card-source', text);
+}
+
+/**
+ * Insert untrusted HTML as a rendered preview. Styles and classes are dropped
+ * so the card's own typography governs — the Source view is where the payload
+ * is shown verbatim.
+ */
+function renderHtmlInto(node, html) {
+    if (typeof DOMPurify === 'undefined') {
+        node.textContent = html || '';
+        return;
+    }
+    node.innerHTML = DOMPurify.sanitize(html || '', {
+        FORBID_TAGS: ['style'],
+        FORBID_ATTR: ['style', 'class', 'id'],
+        ALLOW_DATA_ATTR: false
+    });
+}
+
+/* --------------------------------------------------------------- rendering */
+
+function render() {
+    const container = document.getElementById('output-container');
+    container.innerHTML = '';
+
+    const grid = el('div', 'inspector-grid');
+
+    if (anyReplaced()) grid.appendChild(buildBanner());
+
+    grid.appendChild(buildLeftHeading());
+    grid.appendChild(el('div', 'grid-spacer'));
+    grid.appendChild(buildRightHeading());
+
+    grid.appendChild(buildPlainCard());
+    grid.appendChild(buildGutter('md'));
+    grid.appendChild(buildMarkdownCard());
+
+    grid.appendChild(buildHtmlCard());
+    grid.appendChild(buildGutter('html'));
+    grid.appendChild(buildSimpleHtmlCard());
+
+    container.appendChild(grid);
+
+    const extras = buildExtras();
+    if (extras) container.appendChild(extras);
+}
+
+function buildBanner() {
+    const banner = el('div', 'banner');
+
+    const message = bothReplaced()
+        ? '✓ Both clipboard entries replaced with their equivalents.'
+        : state.mdDone
+            ? '✓ text/plain now holds the Markdown equivalent.'
+            : '✓ text/html now holds the Simple HTML equivalent.';
+
+    banner.appendChild(el('div', 'banner-msg', message));
+
+    const undo = el('button', 'banner-undo', 'Undo');
+    undo.type = 'button';
+    undo.addEventListener('click', undoReplace);
+    banner.appendChild(undo);
+
+    return banner;
+}
+
+function buildLeftHeading() {
+    const heading = el('div', 'col-heading');
+    heading.appendChild(el('div', 'col-heading-title', 'In your clipboard'));
+
+    let subtitle;
+    if (state.plainPresent && state.htmlPresent) {
+        subtitle = 'The clipboard usually contains 2 versions of what you copy.';
+    } else if (state.plainPresent) {
+        subtitle = 'One entry — this copy carried plain text only.';
+    } else if (state.htmlPresent) {
+        subtitle = 'One entry — this copy carried HTML only.';
+    } else {
+        subtitle = 'No text entries on the clipboard.';
+    }
+    heading.appendChild(el('div', 'col-heading-sub', subtitle));
+
+    return heading;
+}
+
+function buildRightHeading() {
+    const heading = el('div', 'col-heading');
+    heading.appendChild(el('div', 'col-heading-title', 'Equivalent'));
+
+    const sub = el('div', 'col-heading-sub');
+    if (state.derivedFrom) {
+        sub.appendChild(document.createTextNode('Derived from '));
+        sub.appendChild(el('span', 'mime', state.derivedFrom));
+    } else {
+        sub.textContent = 'Nothing structural to derive from this copy.';
+    }
+    heading.appendChild(sub);
+
+    return heading;
+}
+
+/* --- clipboard cards (column 1) --- */
+
+function buildPlainCard() {
+    const card = el('div', 'card card--clipboard card--plain');
+
+    const head = el('div', 'card-head');
+    head.appendChild(el('span', 'card-name-mime', 'text/plain'));
+
+    if (state.plainPresent || state.mdDone) {
+        head.appendChild(el('span', 'card-meta', formatBytes(byteLength(state.current.plain))));
+    } else {
+        head.appendChild(el('span', 'card-meta', 'not present'));
+    }
+    if (state.mdDone) head.appendChild(el('span', 'card-flag', '· updated'));
+
+    if (!state.plainPresent && !state.mdDone) {
+        card.appendChild(head);
+        card.appendChild(el('div', 'card-empty', 'This copy did not include a text/plain entry.'));
+        return card;
+    }
+
+    // Plain text has no rendered form — this card is always a <pre>, so its
+    // wrap toggle shows in both views.
+    head.appendChild(buildWrapToggle('plain'));
+    card.appendChild(head);
+    card.appendChild(buildSourcePre('plain', redactBase64(state.current.plain) || '[Empty String]'));
+    return card;
+}
+
+function buildHtmlCard() {
+    const card = el('div', 'card card--clipboard card--html');
+
+    const head = el('div', 'card-head');
+    const name = el('span', 'card-name-mime is-html', 'text/html');
+    head.appendChild(name);
+
+    if (state.htmlPresent || state.htmlDone) {
+        const htmlBytes = byteLength(state.current.html);
+        head.appendChild(el('span', 'card-meta', formatBytes(htmlBytes)));
+
+        // How much of the payload is markup rather than the text it carries.
+        const plainBytes = byteLength(state.original.plain);
+        if (!state.htmlDone && plainBytes > 0) {
+            const ratio = Math.round(htmlBytes / plainBytes);
+            if (ratio >= 10) {
+                head.appendChild(el('span', 'card-note', `· ${ratio}× the text it carries`));
+            }
+        }
+    } else {
+        head.appendChild(el('span', 'card-meta', 'not present'));
+    }
+    if (state.htmlDone) head.appendChild(el('span', 'card-flag', '· updated'));
+
+    if (!state.htmlPresent && !state.htmlDone) {
+        card.appendChild(head);
+        card.appendChild(el('div', 'card-empty', 'This copy did not include a text/html entry.'));
+        return card;
+    }
+
+    if (state.view === 'source') head.appendChild(buildWrapToggle('html'));
+    card.appendChild(head);
+
+    if (state.view === 'source') {
+        // Show the clipboard payload as it really is, tags uppercased to scan.
+        const source = prettyPrintHtml(redactBase64(state.current.html), { uppercaseTags: true });
+        card.appendChild(buildSourcePre('html', source || '[Empty String]'));
+    } else {
+        const body = el('div', 'card-render');
+        renderHtmlInto(body, state.current.html);
+        card.appendChild(body);
+    }
+
+    return card;
+}
+
+/* --- equivalent cards (column 3) --- */
+
+/**
+ * Once an equivalent has been moved into the clipboard it is spent: the left
+ * card now holds it, so it is no longer something to act on. It stays readable
+ * and scrollable, but reads as disabled.
+ */
+function markSpent(card) {
+    card.classList.add('is-spent');
+    card.setAttribute('aria-disabled', 'true');
+}
+
+/**
+ * The savings figure compares the equivalent against the payload it was
+ * derived from. Suppressed when the equivalent isn't actually smaller, and
+ * once it has been moved into the clipboard — there is nothing left to
+ * compare it against at that point.
+ */
+function appendDerivedMeta(head, equivalentText, showSavings) {
+    const bytes = byteLength(equivalentText);
+    const sourceBytes = byteLength(state.original.html) || byteLength(state.original.plain);
+
+    const meta = el('span', 'card-meta');
+    meta.appendChild(document.createTextNode(formatBytes(bytes)));
+
+    if (showSavings && sourceBytes > 0) {
+        const percent = Math.round((1 - bytes / sourceBytes) * 100);
+        if (percent >= 1) {
+            meta.appendChild(document.createTextNode(' · '));
+            meta.appendChild(el('span', 'card-savings', `${percent}% smaller`));
+        }
+    }
+    head.appendChild(meta);
+}
+
+function buildMarkdownCard() {
+    const card = el('div', 'card card--derived card--markdown');
+    if (state.mdDone) markSpent(card);
+
+    const head = el('div', 'card-head');
+    head.appendChild(el('span', 'card-name-derived', 'Markdown'));
+    if (hasMarkdown()) appendDerivedMeta(head, state.equivalents.markdown, !state.mdDone);
+
+    if (!hasMarkdown()) {
+        card.appendChild(head);
+        card.appendChild(el('div', 'card-empty', 'No Markdown equivalent — this copy has no structure to preserve.'));
+        return card;
+    }
+
+    if (state.view === 'source') head.appendChild(buildWrapToggle('markdown'));
+    card.appendChild(head);
+
+    if (state.view === 'source') {
+        card.appendChild(buildSourcePre('markdown', state.equivalents.markdown));
+    } else {
+        const body = el('div', 'card-render');
+        if (typeof marked !== 'undefined') {
+            renderHtmlInto(body, marked.parse(state.equivalents.markdown, { breaks: true }));
+        } else {
+            body.textContent = state.equivalents.markdown;
+        }
+        card.appendChild(body);
+    }
+
+    return card;
+}
+
+function buildSimpleHtmlCard() {
+    const card = el('div', 'card card--derived card--simple-html');
+    if (state.htmlDone) markSpent(card);
+
+    const head = el('div', 'card-head');
+    head.appendChild(el('span', 'card-name-derived', 'Simple HTML'));
+    if (hasSimpleHtml()) appendDerivedMeta(head, state.equivalents.simpleHtml, !state.htmlDone);
+
+    if (!hasSimpleHtml()) {
+        card.appendChild(head);
+        card.appendChild(el('div', 'card-empty', 'No Simple HTML equivalent — this copy has no structure to preserve.'));
+        return card;
+    }
+
+    if (state.view === 'source') head.appendChild(buildWrapToggle('simpleHtml'));
+    card.appendChild(head);
+
+    if (state.view === 'source') {
+        card.appendChild(buildSourcePre('simpleHtml', prettyPrintHtml(state.equivalents.simpleHtml)));
+    } else {
+        const body = el('div', 'card-render');
+        renderHtmlInto(body, state.equivalents.simpleHtml);
+        card.appendChild(body);
+    }
+
+    return card;
+}
+
+/* --- gutter actions (column 2) --- */
+
+/**
+ * The leftward arrow is the point: the equivalents are on the right, the
+ * clipboard is on the left, and clicking moves right → left.
+ */
+function buildGutter(row) {
+    const isMd = row === 'md';
+    const gutter = el('div', isMd ? 'gutter gutter--first' : 'gutter');
+
+    const done = isMd ? state.mdDone : state.htmlDone;
+    const available = isMd ? hasMarkdown() : hasSimpleHtml();
+    const targetPresent = isMd ? state.plainPresent : state.htmlPresent;
+    const target = isMd ? 'text/plain' : 'text/html';
+    const sourceName = isMd ? 'Markdown' : 'Simple HTML';
+
+    const button = el('button', 'replace-btn');
+    button.type = 'button';
+
+    if (done) {
+        button.classList.add('is-done');
+        button.textContent = targetPresent ? '✓ Replaced' : '✓ Added';
+        button.disabled = true;
+    } else {
+        button.textContent = targetPresent ? '← Replace' : '← Add';
+        button.disabled = !available;
+        button.addEventListener('click', () => applyReplace({ md: isMd, html: !isMd }));
+    }
+    gutter.appendChild(button);
+
+    const hint = done ? target : available ? `${sourceName} into ${target}` : 'Nothing to move';
+    gutter.appendChild(el('div', 'replace-hint', hint));
+
+    // "Replace both" straddles the seam between the two clipboard cards.
+    if (isMd && hasMarkdown() && hasSimpleHtml()) {
+        const wrap = el('div', 'replace-both-wrap');
+        const both = el('button', 'replace-both-btn');
+        both.type = 'button';
+
+        if (bothReplaced()) {
+            both.classList.add('is-done');
+            both.textContent = '✓ Both replaced';
+            both.disabled = true;
+        } else {
+            // The double arrow signals two entries moving at once.
+            both.textContent = '⇐ Replace both';
+            both.addEventListener('click', () => applyReplace({ md: true, html: true }));
+        }
+        wrap.appendChild(both);
+        gutter.appendChild(wrap);
+    }
+
+    return gutter;
+}
+
+/* --- extras: non-text clipboard entries and the DOM-bypass diagnostic --- */
+
+function buildExtras() {
+    const hasOther = state.extras.length > 0;
+    const hasAria = !!state.ariaPreview;
+    if (!hasOther && !hasAria) return null;
+
+    const section = el('section', 'extras');
+
+    if (hasOther) {
+        section.appendChild(el('h2', 'extras-title', 'Also on the clipboard'));
+        state.extras.forEach(entry => section.appendChild(buildExtraCard(entry)));
+    }
+
+    if (hasAria) {
+        const ariaCard = buildAriaBypassCard(state.ariaPreview);
+        if (ariaCard) section.appendChild(ariaCard);
+    }
+
+    return section;
+}
+
+function buildExtraCard({ type, blob }) {
+    const card = el('div', 'card card--clipboard');
+
+    const head = el('div', 'card-head');
+    head.appendChild(el('span', 'card-name-mime', type));
+    head.appendChild(el('span', 'card-meta', formatBytes(blob.size)));
+    card.appendChild(head);
+
+    if (type.startsWith('image/')) {
+        const body = el('div', 'card-render');
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(blob);
+        img.alt = `Clipboard image (${type})`;
+        body.appendChild(img);
+        card.appendChild(body);
+    } else {
+        card.appendChild(el('div', 'card-empty', 'No preview available for this type.'));
+    }
+
+    return card;
+}
+
+/**
+ * Experimental: the table reconstructed straight from the page DOM via
+ * aria-selected cells, bypassing the clipboard entirely. Kept as a diagnostic
+ * for the grid-selection work.
+ */
+function buildAriaBypassCard(ariaPreview) {
+    if (typeof TurndownService === 'undefined') {
+        console.warn('Inspector (DOM Bypass): TurndownService not available.');
+        return null;
+    }
+
+    const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+    if (typeof turndownPluginGfm !== 'undefined') td.use(turndownPluginGfm.gfm);
+    const markdown = td.turndown(ariaPreview.html);
+
+    const card = el('div', 'card card--experimental');
+
+    const head = el('div', 'card-head');
+    head.appendChild(el('span', 'card-name-derived', 'Experimental: DOM Bypass'));
+    head.appendChild(el('span', 'card-meta',
+        `${ariaPreview.cellCount} cells, ${ariaPreview.rowCount} rows · ${ariaPreview.strategy ?? 'aria-selected'}`));
+    if (state.view === 'source') head.appendChild(buildWrapToggle('aria'));
+    card.appendChild(head);
+
+    if (state.view === 'source') {
+        card.appendChild(buildSourcePre('aria', markdown || '[Empty]'));
+    } else {
+        const body = el('div', 'card-render');
+        if (typeof marked !== 'undefined') {
+            renderHtmlInto(body, marked.parse(markdown, { breaks: true }));
+        } else {
+            body.textContent = markdown;
+        }
+        card.appendChild(body);
+    }
+
+    const foot = el('div', 'card-foot');
+    const copyBtn = el('button', 'ghost-btn', 'Copy Markdown to clipboard');
+    copyBtn.type = 'button';
+    copyBtn.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(markdown);
+            copyBtn.textContent = 'Copied — re-reading...';
+            // The clipboard changed underneath us; re-read so the grid stays honest.
+            setTimeout(readClipboard, 500);
+        } catch (err) {
+            console.error('Inspector (DOM Bypass): copy failed:', err);
+            copyBtn.textContent = 'Copy failed';
+            setTimeout(() => { copyBtn.textContent = 'Copy Markdown to clipboard'; }, 2000);
+        }
+    });
+    foot.appendChild(copyBtn);
+    card.appendChild(foot);
+
+    return card;
+}
+
+/* ----------------------------------------------------------------- wiring */
+
+function setView(view) {
+    if (state.view === view) return;
+    state.view = view;
+    document.querySelectorAll('#view-toggle .segment').forEach(btn => {
+        btn.classList.toggle('is-selected', btn.dataset.view === view);
+    });
+    render();
+}
+
+// The Async Clipboard API requires document focus. Fire immediately if we
+// already have it, otherwise wait for the first focus event.
 document.addEventListener('DOMContentLoaded', () => {
-    // Add version label
     const manifest = chrome.runtime.getManifest();
     const versionLabel = document.getElementById('version-label');
     if (versionLabel) {
         versionLabel.textContent = `v${manifest.version}`;
     }
+
+    document.querySelectorAll('#view-toggle .segment').forEach(btn => {
+        btn.addEventListener('click', () => setView(btn.dataset.view));
+    });
 
     if (document.hasFocus()) {
         readClipboard();

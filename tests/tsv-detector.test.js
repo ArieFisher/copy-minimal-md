@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 
 let TsvDetector;
 
@@ -45,6 +45,36 @@ describe('TsvDetector.detect', () => {
     const out = TsvDetector.detect({ hasHtml: false, plainText: 'a\tb\r\n1\t2\r\n' });
     expect(out).not.toBeNull();
     expect(out.markdown).toContain('| 1 | 2 |');
+  });
+
+  describe('simpleHtml via marked', () => {
+    // The real page loads lib/marked.min.js as a global; stand in for it so the
+    // marked branch of detect() is exercised rather than the fallback builder.
+    beforeEach(() => {
+      globalThis.marked = {
+        parse: () =>
+          '<table>\n<thead>\n<tr>\n<th>Name</th>\n<th>Age</th>\n</tr>\n</thead>\n' +
+          '<tbody><tr>\n<td>Alice</td>\n<td>30</td>\n</tr>\n</tbody></table>\n'
+      };
+    });
+
+    afterEach(() => {
+      delete globalThis.marked;
+    });
+
+    it('de-emphasises header cells without mangling <thead>', () => {
+      const out = TsvDetector.detect({ hasHtml: false, plainText: 'Name\tAge\nAlice\t30' });
+      expect(out.simpleHtml).toContain('<thead>');
+      expect(out.simpleHtml).not.toContain('"ead>');
+      expect(out.simpleHtml).toContain('<th style="font-weight: normal;">Name</th>');
+    });
+
+    it('keeps existing attributes when marked emits aligned headers', () => {
+      globalThis.marked = { parse: () => '<table>\n<thead>\n<tr>\n<th align="left">Name</th>\n</tr>\n</thead>\n</table>' };
+      const out = TsvDetector.detect({ hasHtml: false, plainText: 'Name\tAge\nAlice\t30' });
+      expect(out.simpleHtml).toContain('<thead>');
+      expect(out.simpleHtml).toContain('<th style="font-weight: normal;" align="left">');
+    });
   });
 });
 

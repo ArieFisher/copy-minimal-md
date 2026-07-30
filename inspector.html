@@ -8,7 +8,19 @@
 </head>
 
 <body>
-  <h1>Clipboard Inspector <span id="version-label"></span></h1>
+  <header class="app-bar">
+    <div class="app-bar-title">
+      <h1>Clipboard Inspector</h1>
+      <span id="version-label"></span>
+    </div>
+
+    <div class="app-bar-actions">
+      <div class="segmented" id="view-toggle" role="group" aria-label="Preview mode">
+        <button type="button" class="segment is-selected" data-view="rendered">Rendered</button>
+        <button type="button" class="segment" data-view="source">Source</button>
+      </div>
+    </div>
+  </header>
 
   <div id="loading">Reading clipboard... Make sure this window is focused.</div>
   <div id="error" class="error-msg" style="display: none;"></div>
