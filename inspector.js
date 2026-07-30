@@ -59,6 +59,10 @@ function prettyPrintHtml(html, { uppercaseTags = false } = {}) {
 
 const state = {
     view: 'rendered',            // 'rendered' | 'source'
+    // Per-pane line wrapping in the source view. Off by default: long lines run
+    // off the edge and the pane scrolls, keeping the payload's real line
+    // structure readable.
+    wrap: { plain: false, html: false, markdown: false, simpleHtml: false, aria: false },
     mdDone: false,               // text/plain has been replaced
     htmlDone: false,             // text/html has been replaced
     original: { plain: '', html: '' },   // as first read — for Undo
@@ -404,6 +408,43 @@ function el(tag, className, text) {
     return node;
 }
 
+/* Two uprights flanking a return arrow — the conventional line-wrap glyph.
+   A module constant, never built from clipboard data. */
+const WRAP_ICON =
+    '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M2.6 2.8v10.4M13.4 2.8v10.4"/>' +
+    '<path d="M5.6 6h4.1a2.1 2.1 0 0 1 0 4.2H7.1"/>' +
+    '<path d="M8.6 8.6 7 10.2l1.6 1.6"/>' +
+    '</svg>';
+
+/**
+ * Toggles wrapping for one source pane. Lives at the top-right of the card
+ * header, directly above the pane it controls.
+ */
+function buildWrapToggle(key) {
+    const on = state.wrap[key];
+    const button = el('button', on ? 'wrap-btn is-on' : 'wrap-btn');
+    button.type = 'button';
+    button.innerHTML = WRAP_ICON;
+
+    const label = on ? 'Stop wrapping lines' : 'Wrap lines';
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-pressed', String(on));
+
+    button.addEventListener('click', () => {
+        state.wrap[key] = !state.wrap[key];
+        render();
+    });
+    return button;
+}
+
+/** A source <pre> that honours the pane's own wrap setting. */
+function buildSourcePre(key, text) {
+    return el('pre', state.wrap[key] ? 'card-source is-wrapped' : 'card-source', text);
+}
+
 /**
  * Insert untrusted HTML as a rendered preview. Styles and classes are dropped
  * so the card's own typography governs — the Source view is where the payload
@@ -517,15 +558,18 @@ function buildPlainCard() {
         head.appendChild(el('span', 'card-meta', 'not present'));
     }
     if (state.mdDone) head.appendChild(el('span', 'card-flag', '· updated'));
-    card.appendChild(head);
 
     if (!state.plainPresent && !state.mdDone) {
+        card.appendChild(head);
         card.appendChild(el('div', 'card-empty', 'This copy did not include a text/plain entry.'));
         return card;
     }
 
-    // Plain text has no rendered form — this card is always a <pre>.
-    card.appendChild(el('pre', 'card-source', redactBase64(state.current.plain) || '[Empty String]'));
+    // Plain text has no rendered form — this card is always a <pre>, so its
+    // wrap toggle shows in both views.
+    head.appendChild(buildWrapToggle('plain'));
+    card.appendChild(head);
+    card.appendChild(buildSourcePre('plain', redactBase64(state.current.plain) || '[Empty String]'));
     return card;
 }
 
@@ -552,18 +596,20 @@ function buildHtmlCard() {
         head.appendChild(el('span', 'card-meta', 'not present'));
     }
     if (state.htmlDone) head.appendChild(el('span', 'card-flag', '· updated'));
-    card.appendChild(head);
 
     if (!state.htmlPresent && !state.htmlDone) {
+        card.appendChild(head);
         card.appendChild(el('div', 'card-empty', 'This copy did not include a text/html entry.'));
         return card;
     }
 
+    if (state.view === 'source') head.appendChild(buildWrapToggle('html'));
+    card.appendChild(head);
+
     if (state.view === 'source') {
-        const pre = el('pre', 'card-source');
         // Show the clipboard payload as it really is, tags uppercased to scan.
-        pre.textContent = prettyPrintHtml(redactBase64(state.current.html), { uppercaseTags: true }) || '[Empty String]';
-        card.appendChild(pre);
+        const source = prettyPrintHtml(redactBase64(state.current.html), { uppercaseTags: true });
+        card.appendChild(buildSourcePre('html', source || '[Empty String]'));
     } else {
         const body = el('div', 'card-render');
         renderHtmlInto(body, state.current.html);
@@ -615,15 +661,18 @@ function buildMarkdownCard() {
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-derived', 'Markdown'));
     if (hasMarkdown()) appendDerivedMeta(head, state.equivalents.markdown, !state.mdDone);
-    card.appendChild(head);
 
     if (!hasMarkdown()) {
+        card.appendChild(head);
         card.appendChild(el('div', 'card-empty', 'No Markdown equivalent — this copy has no structure to preserve.'));
         return card;
     }
 
+    if (state.view === 'source') head.appendChild(buildWrapToggle('markdown'));
+    card.appendChild(head);
+
     if (state.view === 'source') {
-        card.appendChild(el('pre', 'card-source', state.equivalents.markdown));
+        card.appendChild(buildSourcePre('markdown', state.equivalents.markdown));
     } else {
         const body = el('div', 'card-render');
         if (typeof marked !== 'undefined') {
@@ -644,15 +693,18 @@ function buildSimpleHtmlCard() {
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-derived', 'Simple HTML'));
     if (hasSimpleHtml()) appendDerivedMeta(head, state.equivalents.simpleHtml, !state.htmlDone);
-    card.appendChild(head);
 
     if (!hasSimpleHtml()) {
+        card.appendChild(head);
         card.appendChild(el('div', 'card-empty', 'No Simple HTML equivalent — this copy has no structure to preserve.'));
         return card;
     }
 
+    if (state.view === 'source') head.appendChild(buildWrapToggle('simpleHtml'));
+    card.appendChild(head);
+
     if (state.view === 'source') {
-        card.appendChild(el('pre', 'card-source', prettyPrintHtml(state.equivalents.simpleHtml)));
+        card.appendChild(buildSourcePre('simpleHtml', prettyPrintHtml(state.equivalents.simpleHtml)));
     } else {
         const body = el('div', 'card-render');
         renderHtmlInto(body, state.equivalents.simpleHtml);
@@ -782,10 +834,11 @@ function buildAriaBypassCard(ariaPreview) {
     head.appendChild(el('span', 'card-name-derived', 'Experimental: DOM Bypass'));
     head.appendChild(el('span', 'card-meta',
         `${ariaPreview.cellCount} cells, ${ariaPreview.rowCount} rows · ${ariaPreview.strategy ?? 'aria-selected'}`));
+    if (state.view === 'source') head.appendChild(buildWrapToggle('aria'));
     card.appendChild(head);
 
     if (state.view === 'source') {
-        card.appendChild(el('pre', 'card-source', markdown || '[Empty]'));
+        card.appendChild(buildSourcePre('aria', markdown || '[Empty]'));
     } else {
         const body = el('div', 'card-render');
         if (typeof marked !== 'undefined') {
