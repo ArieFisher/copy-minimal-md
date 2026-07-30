@@ -124,23 +124,6 @@ body {
   box-shadow: 0 1px 3px rgba(60, 50, 20, 0.15);
 }
 
-.reread-btn {
-  background: none;
-  border: 1px solid var(--border-control);
-  color: var(--text-secondary);
-  border-radius: 99px;
-  padding: 8px 16px;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.reread-btn:hover {
-  border-color: var(--action);
-  color: var(--action);
-}
-
 /* --------------------------------------------------- loading / error state */
 
 #loading {
@@ -265,6 +248,19 @@ body {
 
 .card--derived {
   border-color: var(--border-derived);
+}
+
+/* Spent: this equivalent now lives in the clipboard card to its left, so it is
+   no longer an alternative to act on. Still readable and scrollable — links
+   are the only thing actually switched off. */
+.card--derived.is-spent {
+  border-color: var(--border-neutral);
+  opacity: 0.55;
+}
+
+.card--derived.is-spent a {
+  pointer-events: none;
+  color: var(--text-secondary);
 }
 
 .card-head {

@@ -474,7 +474,7 @@ function buildLeftHeading() {
 
     let subtitle;
     if (state.plainPresent && state.htmlPresent) {
-        subtitle = 'Two entries, written together when you copied.';
+        subtitle = 'The clipboard usually contains 2 versions of what you copy.';
     } else if (state.plainPresent) {
         subtitle = 'One entry — this copy carried plain text only.';
     } else if (state.htmlPresent) {
@@ -495,7 +495,6 @@ function buildRightHeading() {
     if (state.derivedFrom) {
         sub.appendChild(document.createTextNode('Derived from '));
         sub.appendChild(el('span', 'mime', state.derivedFrom));
-        sub.appendChild(document.createTextNode(' — the same content, none of the mess.'));
     } else {
         sub.textContent = 'Nothing structural to derive from this copy.';
     }
@@ -577,17 +576,29 @@ function buildHtmlCard() {
 /* --- equivalent cards (column 3) --- */
 
 /**
- * The savings figure compares the equivalent against the payload it was
- * derived from. Suppressed when the equivalent isn't actually smaller.
+ * Once an equivalent has been moved into the clipboard it is spent: the left
+ * card now holds it, so it is no longer something to act on. It stays readable
+ * and scrollable, but reads as disabled.
  */
-function appendDerivedMeta(head, equivalentText) {
+function markSpent(card) {
+    card.classList.add('is-spent');
+    card.setAttribute('aria-disabled', 'true');
+}
+
+/**
+ * The savings figure compares the equivalent against the payload it was
+ * derived from. Suppressed when the equivalent isn't actually smaller, and
+ * once it has been moved into the clipboard — there is nothing left to
+ * compare it against at that point.
+ */
+function appendDerivedMeta(head, equivalentText, showSavings) {
     const bytes = byteLength(equivalentText);
     const sourceBytes = byteLength(state.original.html) || byteLength(state.original.plain);
 
     const meta = el('span', 'card-meta');
     meta.appendChild(document.createTextNode(formatBytes(bytes)));
 
-    if (sourceBytes > 0) {
+    if (showSavings && sourceBytes > 0) {
         const percent = Math.round((1 - bytes / sourceBytes) * 100);
         if (percent >= 1) {
             meta.appendChild(document.createTextNode(' · '));
@@ -599,10 +610,11 @@ function appendDerivedMeta(head, equivalentText) {
 
 function buildMarkdownCard() {
     const card = el('div', 'card card--derived card--markdown');
+    if (state.mdDone) markSpent(card);
 
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-derived', 'Markdown'));
-    if (hasMarkdown()) appendDerivedMeta(head, state.equivalents.markdown);
+    if (hasMarkdown()) appendDerivedMeta(head, state.equivalents.markdown, !state.mdDone);
     card.appendChild(head);
 
     if (!hasMarkdown()) {
@@ -627,10 +639,11 @@ function buildMarkdownCard() {
 
 function buildSimpleHtmlCard() {
     const card = el('div', 'card card--derived card--simple-html');
+    if (state.htmlDone) markSpent(card);
 
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-derived', 'Simple HTML'));
-    if (hasSimpleHtml()) appendDerivedMeta(head, state.equivalents.simpleHtml);
+    if (hasSimpleHtml()) appendDerivedMeta(head, state.equivalents.simpleHtml, !state.htmlDone);
     card.appendChild(head);
 
     if (!hasSimpleHtml()) {
@@ -826,11 +839,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.querySelectorAll('#view-toggle .segment').forEach(btn => {
         btn.addEventListener('click', () => setView(btn.dataset.view));
-    });
-
-    document.getElementById('reread-btn').addEventListener('click', () => {
-        document.getElementById('loading').style.display = 'block';
-        readClipboard();
     });
 
     if (document.hasFocus()) {
