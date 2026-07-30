@@ -85,147 +85,15 @@ const hasSimpleHtml = () => !!state.equivalents.simpleHtml;
 /**
  * Run the copy-minimal-md conversion over the clipboard payload.
  *
- * With a text/html entry this is the normal path: repair the source-specific
- * quirks, sanitize, then Turndown for the Markdown. Without one we fall back to
- * TSV detection over the plain text, which yields both a Markdown table and a
- * simple HTML table.
+ * With a text/html entry this is the normal path, handed to Equivalents. Without
+ * one we fall back to TSV detection over the plain text, which yields both a
+ * Markdown table and a simple HTML table.
  *
  * Returns null when the copy has no structure worth deriving.
  */
 function deriveEquivalents({ html, plain, hasHtml }) {
     if (hasHtml && html) {
-        let htmlText = html;
-        let sourceType = 'HTML';
-
-        const doc = new DOMParser().parseFromString(htmlText, 'text/html');
-        let modified = false;
-
-        // Google Sheets: block-level <div>s inside cells produce extra newlines.
-        Array.from(doc.querySelectorAll('td div, th div')).forEach(div => {
-            const span = doc.createElement('span');
-            span.append(...div.childNodes);
-            div.replaceWith(span);
-            modified = true;
-        });
-
-        // Google Docs wraps the whole copy in <b style="font-weight:normal">.
-        Array.from(doc.querySelectorAll('b[style*="font-weight:normal"], b[style*="font-weight: normal"]')).forEach(b => {
-            const span = doc.createElement('span');
-            span.append(...b.childNodes);
-            b.replaceWith(span);
-            modified = true;
-        });
-
-        // Implicit-header promotion: Turndown GFM needs a <thead> to emit a table.
-        doc.querySelectorAll('table').forEach(table => {
-            const firstRow = table.rows[0];
-            if (firstRow && !table.tHead) {
-                const isImplicitHeader = Array.from(firstRow.cells).every(cell => cell.tagName === 'TH');
-                if (!isImplicitHeader) {
-                    const thead = doc.createElement('thead');
-                    const tr = doc.createElement('tr');
-                    for (let i = 0; i < firstRow.cells.length; i++) {
-                        const th = doc.createElement('th');
-                        th.textContent = firstRow.cells[i]?.textContent || '';
-                        tr.appendChild(th);
-                    }
-                    thead.appendChild(tr);
-                    table.insertBefore(thead, table.firstChild);
-                    firstRow.remove();
-                    modified = true;
-                }
-            }
-        });
-
-        // Reconstruct ARIA flex/grid tables into real tables (Databricks, Notion).
-        const ariaRows = doc.querySelectorAll('[role="row"]');
-        if (ariaRows.length > 0 && doc.querySelectorAll('table').length === 0) {
-            const newTable = doc.createElement('table');
-            const tbody = doc.createElement('tbody');
-            let thead = null;
-
-            ariaRows.forEach(ariaRow => {
-                const tr = doc.createElement('tr');
-                const ariaCells = ariaRow.querySelectorAll('[role="cell"], [role="columnheader"], [role="gridcell"]');
-                let isHeaderRow = false;
-
-                if (ariaCells.length > 0) {
-                    ariaCells.forEach(ariaCell => {
-                        const isHeader = ariaCell.getAttribute('role') === 'columnheader';
-                        if (isHeader) isHeaderRow = true;
-                        const cell = doc.createElement(isHeader ? 'th' : 'td');
-                        cell.innerHTML = ariaCell.innerHTML;
-                        tr.appendChild(cell);
-                    });
-                } else {
-                    Array.from(ariaRow.children).forEach(child => {
-                        const cell = doc.createElement('td');
-                        cell.innerHTML = child.innerHTML;
-                        tr.appendChild(cell);
-                    });
-                }
-
-                if (isHeaderRow) {
-                    if (!thead) thead = doc.createElement('thead');
-                    thead.appendChild(tr);
-                } else {
-                    tbody.appendChild(tr);
-                }
-            });
-
-            if (thead) {
-                newTable.appendChild(thead);
-            } else if (tbody.firstChild) {
-                // No columnheader roles found — promote the first row instead.
-                thead = doc.createElement('thead');
-                const firstRow = tbody.firstChild;
-                const tr = doc.createElement('tr');
-                Array.from(firstRow.children).forEach(cell => {
-                    const th = doc.createElement('th');
-                    th.innerHTML = cell.innerHTML;
-                    tr.appendChild(th);
-                });
-                thead.appendChild(tr);
-                newTable.appendChild(thead);
-                firstRow.remove();
-            }
-            newTable.appendChild(tbody);
-
-            const firstRowParent = ariaRows[0].parentElement;
-            if (firstRowParent) {
-                firstRowParent.insertBefore(newTable, ariaRows[0]);
-            } else {
-                doc.body.prepend(newTable);
-            }
-
-            ariaRows.forEach(row => row.remove());
-            modified = true;
-            sourceType = 'HTML (Extracted ARIA Table)';
-        }
-
-        if (modified) htmlText = doc.body.innerHTML;
-
-        let cleanHtml = htmlText;
-        if (typeof DOMPurify !== 'undefined') {
-            cleanHtml = DOMPurify.sanitize(htmlText, {
-                ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'u', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'br', 'hr', 'blockquote', 'code', 'pre'],
-                ALLOWED_ATTR: ['href', 'src', 'alt', 'title'],
-                ALLOW_DATA_ATTR: false
-            });
-        }
-
-        const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-        if (typeof turndownPluginGfm !== 'undefined') {
-            turndownService.use(turndownPluginGfm.gfm);
-        }
-
-        let markdown = turndownService.turndown(cleanHtml);
-        // Collapse the whitespace Turndown leaves inside link text.
-        markdown = markdown.replace(/\[([\s\S]+?)\]\((.*?)\)/g, (m, innerText, href) => {
-            return `[${innerText.trim().replace(/\s+/g, ' ')}](${href})`;
-        });
-
-        return { markdown, simpleHtml: cleanHtml, derivedFrom: 'text/html', sourceType };
+        return Equivalents.fromHtml(html);
     }
 
     if (plain) {
