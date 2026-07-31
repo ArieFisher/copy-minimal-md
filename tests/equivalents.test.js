@@ -166,8 +166,12 @@ describe('Equivalents.fromHtml — ARIA grids', () => {
 });
 
 describe('Equivalents.isSameHtmlEntry', () => {
-  // What cmd+shift+U writes for a headerless table, and what the clipboard
-  // sanitizer hands back on the next read — captured from a real Chromium.
+  // What cmd+shift+U writes for a headerless table, and what the clipboard hands
+  // back on the next read — captured from Chromium on Linux, which restores the
+  // <tbody>. macOS also prefixes a <meta charset>, covered separately below.
+  // These cases are the rule, not one platform's output: each covers a kind of
+  // change the clipboard is known to make, so a platform we have not measured
+  // has to produce something new to escape them.
   const WRITTEN = '<table><tr><td>header 1</td><td>header 2</td></tr><tr><td>text 1</td><td>12</td></tr></table>';
   const READ_BACK = '<table><tbody><tr><td>header 1</td><td>header 2</td></tr><tr><td>text 1</td><td>12</td></tr></tbody></table>';
 

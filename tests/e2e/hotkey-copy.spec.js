@@ -123,7 +123,9 @@ test('leaves text/html alone for a copy with no table', async ({ context, server
 
   expect(clip.plain).toContain('# Title');
   expect(clip.plain).toContain('**bold**');
-  // text/plain alone — writing HTML here would change what every ordinary paste
-  // produces, so the hotkey reserves it for tables.
-  expect(clip.types).toEqual(['text/plain']);
+  // No text/html — writing one would change what every ordinary paste produces,
+  // so the hotkey reserves it for tables. Asserted as an absence rather than an
+  // exact list of types: what a platform's clipboard carries alongside the entry
+  // we asked for is not this test's business.
+  expect(clip.types).not.toContain('text/html');
 });

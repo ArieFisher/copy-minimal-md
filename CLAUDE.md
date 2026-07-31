@@ -2,6 +2,24 @@
 
 Guidance for Claude Code sessions working in this repository.
 
+## The clipboard rewrites what you give it
+
+Reading an entry back never returns the bytes that were written. The browser
+parses the HTML and writes it out again, and what that changes depends on the
+platform:
+
+- `<tbody>` is put back around table rows. Everywhere. `simplifyTables` drops it
+  from a table with no header row; the clipboard restores it.
+- `<meta charset="utf-8">` is added on macOS. Not on Linux.
+
+So never compare two clipboard payloads as strings. `Equivalents.isSameHtmlEntry`
+holds the rule: ignore what the clipboard adds, still count everything the
+conversion itself changes.
+
+Tests here run on Linux, and most users are on macOS. Something a Linux run does
+not do, the product may still do. Do not conclude "the browser doesn't do that"
+from one platform — say which platform you measured, or go and check the other.
+
 ## Attribution
 
 Do not attribute work to Claude, and do not record session identifiers
