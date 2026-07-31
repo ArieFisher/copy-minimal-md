@@ -381,17 +381,18 @@ function buildLeftHeading() {
     const heading = el('div', 'col-heading');
     heading.appendChild(el('div', 'col-heading-title', 'In your clipboard'));
 
-    let subtitle;
+    const sub = el('div', 'col-heading-sub');
     if (state.plainPresent && state.htmlPresent) {
-        subtitle = 'The clipboard usually contains 2 versions of what you copy.';
+        sub.textContent = 'The clipboard usually contains 2 versions of what you copy.';
     } else if (state.plainPresent) {
-        subtitle = 'One entry — this copy carried plain text only.';
+        sub.appendChild(document.createTextNode('When you pressed “copy”, the application only populated '));
+        sub.appendChild(el('span', 'mime', 'text/plain'));
     } else if (state.htmlPresent) {
-        subtitle = 'One entry — this copy carried HTML only.';
+        sub.textContent = 'One entry — this copy carried HTML only.';
     } else {
-        subtitle = 'No text entries on the clipboard.';
+        sub.textContent = 'No text entries on the clipboard.';
     }
-    heading.appendChild(el('div', 'col-heading-sub', subtitle));
+    heading.appendChild(sub);
 
     return heading;
 }
@@ -404,6 +405,8 @@ function buildRightHeading() {
     if (state.derivedFrom) {
         sub.appendChild(document.createTextNode('Derived from '));
         sub.appendChild(el('span', 'mime', state.derivedFrom));
+    } else if (state.plainPresent) {
+        sub.textContent = 'Conversion would produce original text.';
     } else {
         sub.textContent = 'Nothing structural to derive from this copy.';
     }
@@ -467,7 +470,14 @@ function buildHtmlCard() {
 
     if (!state.htmlPresent && !state.htmlDone) {
         card.appendChild(head);
-        card.appendChild(el('div', 'card-empty', 'This copy did not include a text/html entry.'));
+        // A missing entry is worth naming only while something is waiting to fill
+        // it — the gutter offers to add the Simple HTML. With no equivalent
+        // derived there is no such offer, and the card is inert.
+        if (hasSimpleHtml()) {
+            card.appendChild(el('div', 'card-empty', 'This copy did not include a text/html entry.'));
+        } else {
+            markInert(card);
+        }
         return card;
     }
 
@@ -496,6 +506,17 @@ function buildHtmlCard() {
  */
 function markSpent(card) {
     card.classList.add('is-spent');
+    card.setAttribute('aria-disabled', 'true');
+}
+
+/**
+ * Nothing on offer here. A copy of unstructured plain text has no equivalents to
+ * derive and no text/html to convert, so those three cards hold nothing and can
+ * do nothing. The card keeps its place — the two columns stay aligned row for
+ * row — but reads as switched off rather than explaining its own emptiness.
+ */
+function markInert(card) {
+    card.classList.add('is-inert');
     card.setAttribute('aria-disabled', 'true');
 }
 
@@ -531,8 +552,8 @@ function buildMarkdownCard() {
     if (hasMarkdown()) appendDerivedMeta(head, state.equivalents.markdown, !state.mdDone);
 
     if (!hasMarkdown()) {
+        markInert(card);
         card.appendChild(head);
-        card.appendChild(el('div', 'card-empty', 'No Markdown equivalent — this copy has no structure to preserve.'));
         return card;
     }
 
@@ -563,8 +584,8 @@ function buildSimpleHtmlCard() {
     if (hasSimpleHtml()) appendDerivedMeta(head, state.equivalents.simpleHtml, !state.htmlDone);
 
     if (!hasSimpleHtml()) {
+        markInert(card);
         card.appendChild(head);
-        card.appendChild(el('div', 'card-empty', 'No Simple HTML equivalent — this copy has no structure to preserve.'));
         return card;
     }
 
