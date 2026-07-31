@@ -80,18 +80,22 @@ const bothReplaced = () => state.mdDone && state.htmlDone;
 const hasMarkdown = () => !!state.equivalents.markdown;
 const hasSimpleHtml = () => !!state.equivalents.simpleHtml;
 
+/** Line endings and a trailing newline survive the clipboard unpredictably. */
+const normalizeText = (text) => (text || '').replace(/\r\n/g, '\n').replace(/\s+$/, '');
+
 /**
- * The clipboard already holds this equivalent, so moving it across would write
- * the same bytes back. True after a replace here, and true from the outset for
- * anything copied with cmd+shift+U, which writes these same entries itself.
+ * The clipboard already holds this equivalent, so moving it across would hand
+ * back the same clipboard. True after a replace here, and true from the outset
+ * for anything copied with cmd+shift+U, which writes these entries itself.
  *
- * Compared exactly. A near-miss — say a platform that hands newlines back as
- * CRLF — leaves the action enabled, which is the safe way to be wrong: the user
- * can still perform a write that changes nothing, rather than being locked out
- * of one that would have.
+ * Neither side is compared as a string: what comes off the clipboard has been
+ * through the browser's sanitiser and is not byte-for-byte what was written.
+ * Equivalents.isSameHtmlEntry carries the rule for the markup.
  */
-const mdOnClipboard = () => hasMarkdown() && state.equivalents.markdown === state.current.plain;
-const simpleHtmlOnClipboard = () => hasSimpleHtml() && state.equivalents.simpleHtml === state.current.html;
+const mdOnClipboard = () =>
+    hasMarkdown() && normalizeText(state.equivalents.markdown) === normalizeText(state.current.plain);
+const simpleHtmlOnClipboard = () =>
+    hasSimpleHtml() && Equivalents.isSameHtmlEntry(state.equivalents.simpleHtml, state.current.html);
 
 /* ------------------------------------------------------------- derivation */
 

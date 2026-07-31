@@ -53,6 +53,23 @@ test('switches off the actions a hotkey copy has already satisfied', async ({ co
   await expect(page.locator('.card--simple-html .card-flag')).toHaveText(/already in text\/html/);
 });
 
+test('sees through the <tbody> the clipboard restores on a headerless table', async ({ context, server, extensionId }) => {
+  // A headerless copy is the case where written and read-back markup genuinely
+  // differ: simplifyTables drops the <tbody>, the clipboard sanitizer puts it
+  // back. Both strings below came off a real run.
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    plain: '| header 1 | header 2 |\n| --- | --- |\n| text 1 | 12 |\n| text 2 | 34 |',
+    html: '<table><tbody><tr><td>header 1</td><td>header 2</td></tr><tr><td>text 1</td><td>12</td></tr><tr><td>text 2</td><td>34</td></tr></tbody></table>',
+  });
+
+  await expect(page.locator('.card--markdown')).toHaveClass(/is-spent/);
+  await expect(page.locator('.card--simple-html')).toHaveClass(/is-spent/);
+  await expect(page.locator('.replace-both-btn')).toBeDisabled();
+  for (const btn of await page.locator('.replace-btn').all()) {
+    await expect(btn).toBeDisabled();
+  }
+});
+
 test('keeps the actions live when the equivalents would change something', async ({ context, server, extensionId }) => {
   const page = await inspectClipboard({ context, server, extensionId }, {
     plain: 'Heading\nsome text',

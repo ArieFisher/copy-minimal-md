@@ -65,4 +65,5 @@ module.exports = {
     get gridToSimpleHtml() { return getPipeline().gridToSimpleHtml; },
     get fromHtml() { return getEquivalents().fromHtml; },
     get toSimpleHtml() { return getEquivalents().toSimpleHtml; },
+    get isSameHtmlEntry() { return getEquivalents().isSameHtmlEntry; },
 };

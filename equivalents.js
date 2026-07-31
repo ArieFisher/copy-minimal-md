@@ -5,7 +5,7 @@
  * inspector.js so the derivation can be unit tested directly, with no clipboard
  * and no chrome APIs in the way.
  *
- * Exports `window.Equivalents = { fromHtml, toSimpleHtml }`.
+ * Exports `window.Equivalents = { fromHtml, toSimpleHtml, isSameHtmlEntry }`.
  *
  * Expected globals at call time:
  *   - DOMPurify         (lib/purify.min.js)
@@ -218,6 +218,54 @@
         return doc.body.innerHTML;
     }
 
+    /* ------------------------------------------------------------ comparison */
+
+    /**
+     * Are these two payloads the same clipboard entry?
+     *
+     * Deliberately not a string comparison. HTML handed to the clipboard comes
+     * back parsed and re-serialised by the browser's own sanitiser: the <tbody>
+     * that simplifyTables drops from a headerless table is put back, a source
+     * may prefix a <meta charset>, and fragment markers can arrive as comments.
+     * None of that is a difference anyone can act on — replacing the entry would
+     * hand back the identical clipboard.
+     *
+     * Only those transport artefacts are absorbed. Everything the conversion
+     * itself changes — inline styles, vendor tags, wrapper elements, cell
+     * contents — still reads as a difference, which is what keeps the action
+     * live for a copy that genuinely needs it.
+     */
+    function isSameHtmlEntry(a, b) {
+        return canonical(a) === canonical(b);
+    }
+
+    function canonical(html) {
+        const doc = new DOMParser().parseFromString(html || '', 'text/html');
+
+        doc.querySelectorAll('meta, base').forEach(node => node.remove());
+
+        // The parser supplies a <tbody> whether or not the markup asked for one,
+        // so its presence can never tell two payloads apart.
+        doc.querySelectorAll('tbody').forEach(tbody => tbody.replaceWith(...tbody.childNodes));
+
+        const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT);
+        const comments = [];
+        while (walker.nextNode()) comments.push(walker.currentNode);
+        comments.forEach(comment => comment.remove());
+
+        // Same rule as simplifyTables: whitespace between structural table tags
+        // is not content, and the parser moves it out of the table regardless.
+        doc.querySelectorAll('table, thead, tbody, tfoot, tr').forEach(node => {
+            Array.from(node.childNodes).forEach(child => {
+                if (child.nodeType === Node.TEXT_NODE && !child.textContent.trim()) {
+                    child.remove();
+                }
+            });
+        });
+
+        return doc.body.innerHTML.trim();
+    }
+
     /* ------------------------------------------------------------ conversion */
 
     function sanitize(html) {
@@ -238,7 +286,7 @@
         );
     }
 
-    global.Equivalents = { fromHtml, toSimpleHtml };
+    global.Equivalents = { fromHtml, toSimpleHtml, isSameHtmlEntry };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) {
