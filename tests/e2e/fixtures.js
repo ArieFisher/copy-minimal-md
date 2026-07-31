@@ -8,6 +8,11 @@
  * - Waits for the service worker so context.serviceWorkers() is never empty.
  *
  * CI must wrap Playwright in `xvfb-run` (Linux headed Chromium).
+ *
+ * Set PW_CHROMIUM_PATH to run against a Chromium that Playwright did not install
+ * itself — a sandbox with a preloaded browser, say, or a build whose version does
+ * not match the pinned @playwright/test. Unset (the CI case) uses whichever
+ * browser `npx playwright install` put down.
  */
 const { test: base, chromium } = require('@playwright/test');
 const http = require('node:http');
@@ -50,6 +55,7 @@ exports.test = base.extend({
   context: async ({}, use) => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cmm-e2e-'));
     const context = await chromium.launchPersistentContext(userDataDir, {
+      executablePath: process.env.PW_CHROMIUM_PATH || undefined,
       headless: false,
       args: [
         `--disable-extensions-except=${EXTENSION_PATH}`,
