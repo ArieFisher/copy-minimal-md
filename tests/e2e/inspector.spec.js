@@ -40,8 +40,8 @@ test('switches off the actions a hotkey copy has already satisfied', async ({ co
   });
 
   // Both equivalents already sit on the clipboard, so every write is a no-op.
-  await expect(page.locator('.card--markdown')).toHaveClass(/is-spent/);
-  await expect(page.locator('.card--simple-html')).toHaveClass(/is-spent/);
+  await expect(page.locator('.card--markdown')).toHaveClass(/is-inert/);
+  await expect(page.locator('.card--simple-html')).toHaveClass(/is-inert/);
   for (const btn of await page.locator('.replace-btn').all()) {
     await expect(btn).toBeDisabled();
   }
@@ -51,6 +51,11 @@ test('switches off the actions a hotkey copy has already satisfied', async ({ co
   await expect(page.locator('.replace-hint').first()).toHaveText(/text\/plain already matches/);
   await expect(page.locator('.card--markdown .card-flag')).toHaveText(/already in text\/plain/);
   await expect(page.locator('.card--simple-html .card-flag')).toHaveText(/already in text\/html/);
+
+  // Head only. Repeating the payload inside a switched-off pane says nothing the
+  // card to the left is not already saying.
+  await expect(page.locator('.card--markdown .card-source, .card--markdown .card-render')).toHaveCount(0);
+  await expect(page.locator('.card--simple-html .card-source, .card--simple-html .card-render')).toHaveCount(0);
 });
 
 test('sees through the <tbody> the clipboard restores on a headerless table', async ({ context, server, extensionId }) => {
@@ -62,8 +67,8 @@ test('sees through the <tbody> the clipboard restores on a headerless table', as
     html: '<table><tbody><tr><td>header 1</td><td>header 2</td></tr><tr><td>text 1</td><td>12</td></tr><tr><td>text 2</td><td>34</td></tr></tbody></table>',
   });
 
-  await expect(page.locator('.card--markdown')).toHaveClass(/is-spent/);
-  await expect(page.locator('.card--simple-html')).toHaveClass(/is-spent/);
+  await expect(page.locator('.card--markdown')).toHaveClass(/is-inert/);
+  await expect(page.locator('.card--simple-html')).toHaveClass(/is-inert/);
   await expect(page.locator('.replace-both-btn')).toBeDisabled();
   for (const btn of await page.locator('.replace-btn').all()) {
     await expect(btn).toBeDisabled();
@@ -76,7 +81,9 @@ test('keeps the actions live when the equivalents would change something', async
     html: '<h1 style="color:red">Heading</h1><p>some <b>text</b></p>',
   });
 
-  await expect(page.locator('.card--markdown')).not.toHaveClass(/is-spent/);
+  await expect(page.locator('.card--markdown')).not.toHaveClass(/is-inert/);
   await expect(page.locator('.replace-btn').first()).toBeEnabled();
   await expect(page.locator('.replace-hint').first()).toHaveText(/Markdown into text\/plain/);
+  // …and it still shows what it is offering.
+  await expect(page.locator('.card--markdown .card-render')).toHaveCount(1);
 });

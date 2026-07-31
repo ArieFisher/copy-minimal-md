@@ -517,22 +517,11 @@ function buildHtmlCard() {
 /* --- equivalent cards (column 3) --- */
 
 /**
- * An equivalent the clipboard already holds is spent: the left card is showing
- * the same bytes, so this one is no longer something to act on. Either the user
- * moved it there, or it arrived that way — cmd+shift+U writes the Markdown and
- * the Simple HTML itself for a table copy. It stays readable and scrollable,
- * but reads as disabled.
- */
-function markSpent(card) {
-    card.classList.add('is-spent');
-    card.setAttribute('aria-disabled', 'true');
-}
-
-/**
- * Nothing on offer here. A copy of unstructured plain text has no equivalents to
- * derive and no text/html to convert, so those three cards hold nothing and can
- * do nothing. The card keeps its place — the two columns stay aligned row for
- * row — but reads as switched off rather than explaining its own emptiness.
+ * Nothing on offer here, for either of the two reasons a card can have nothing
+ * to say: there was nothing to derive, or what was derived is already sitting in
+ * the card to the left. Both leave an empty frame. It keeps its place — the two
+ * columns stay aligned row for row — and reads as switched off, with the head
+ * saying which of the two it is.
  */
 function markInert(card) {
     card.classList.add('is-inert');
@@ -565,16 +554,18 @@ function appendDerivedMeta(head, equivalentText, showSavings) {
 function buildMarkdownCard() {
     const card = el('div', 'card card--derived card--markdown');
     const onClipboard = mdOnClipboard();
-    if (onClipboard) markSpent(card);
 
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-derived', 'Markdown'));
     if (hasMarkdown()) appendDerivedMeta(head, state.equivalents.markdown, !onClipboard);
-    // Say why the card is switched off. After a replace the banner and the left
-    // card's "· updated" already account for it.
+    // Say why the card is empty. After a replace the banner and the left card's
+    // "· updated" already account for it.
     if (onClipboard && !state.mdDone) head.appendChild(el('span', 'card-flag', '· already in text/plain'));
 
-    if (!hasMarkdown()) {
+    // Empty frame either way: nothing was derived, or the card to the left is
+    // already showing this. Printing it again inside a switched-off pane adds
+    // nothing the head does not already say.
+    if (!hasMarkdown() || onClipboard) {
         markInert(card);
         card.appendChild(head);
         return card;
@@ -601,14 +592,13 @@ function buildMarkdownCard() {
 function buildSimpleHtmlCard() {
     const card = el('div', 'card card--derived card--simple-html');
     const onClipboard = simpleHtmlOnClipboard();
-    if (onClipboard) markSpent(card);
 
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-derived', 'Simple HTML'));
     if (hasSimpleHtml()) appendDerivedMeta(head, state.equivalents.simpleHtml, !onClipboard);
     if (onClipboard && !state.htmlDone) head.appendChild(el('span', 'card-flag', '· already in text/html'));
 
-    if (!hasSimpleHtml()) {
+    if (!hasSimpleHtml() || onClipboard) {
         markInert(card);
         card.appendChild(head);
         return card;
