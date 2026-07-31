@@ -80,6 +80,23 @@ const bothReplaced = () => state.mdDone && state.htmlDone;
 const hasMarkdown = () => !!state.equivalents.markdown;
 const hasSimpleHtml = () => !!state.equivalents.simpleHtml;
 
+/** Line endings and a trailing newline survive the clipboard unpredictably. */
+const normalizeText = (text) => (text || '').replace(/\r\n/g, '\n').replace(/\s+$/, '');
+
+/**
+ * The clipboard already holds this equivalent, so moving it across would hand
+ * back the same clipboard. True after a replace here, and true from the outset
+ * for anything copied with cmd+shift+U, which writes these entries itself.
+ *
+ * Neither side is compared as a string: what comes off the clipboard has been
+ * through the browser's sanitiser and is not byte-for-byte what was written.
+ * Equivalents.isSameHtmlEntry carries the rule for the markup.
+ */
+const mdOnClipboard = () =>
+    hasMarkdown() && normalizeText(state.equivalents.markdown) === normalizeText(state.current.plain);
+const simpleHtmlOnClipboard = () =>
+    hasSimpleHtml() && Equivalents.isSameHtmlEntry(state.equivalents.simpleHtml, state.current.html);
+
 /* ------------------------------------------------------------- derivation */
 
 /**
@@ -500,20 +517,11 @@ function buildHtmlCard() {
 /* --- equivalent cards (column 3) --- */
 
 /**
- * Once an equivalent has been moved into the clipboard it is spent: the left
- * card now holds it, so it is no longer something to act on. It stays readable
- * and scrollable, but reads as disabled.
- */
-function markSpent(card) {
-    card.classList.add('is-spent');
-    card.setAttribute('aria-disabled', 'true');
-}
-
-/**
- * Nothing on offer here. A copy of unstructured plain text has no equivalents to
- * derive and no text/html to convert, so those three cards hold nothing and can
- * do nothing. The card keeps its place — the two columns stay aligned row for
- * row — but reads as switched off rather than explaining its own emptiness.
+ * Nothing on offer here, for either of the two reasons a card can have nothing
+ * to say: there was nothing to derive, or what was derived is already sitting in
+ * the card to the left. Both leave an empty frame. It keeps its place — the two
+ * columns stay aligned row for row — and reads as switched off, with the head
+ * saying which of the two it is.
  */
 function markInert(card) {
     card.classList.add('is-inert');
@@ -545,13 +553,19 @@ function appendDerivedMeta(head, equivalentText, showSavings) {
 
 function buildMarkdownCard() {
     const card = el('div', 'card card--derived card--markdown');
-    if (state.mdDone) markSpent(card);
+    const onClipboard = mdOnClipboard();
 
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-derived', 'Markdown'));
-    if (hasMarkdown()) appendDerivedMeta(head, state.equivalents.markdown, !state.mdDone);
+    if (hasMarkdown()) appendDerivedMeta(head, state.equivalents.markdown, !onClipboard);
+    // Say why the card is empty. After a replace the banner and the left card's
+    // "· updated" already account for it.
+    if (onClipboard && !state.mdDone) head.appendChild(el('span', 'card-flag', '· already in text/plain'));
 
-    if (!hasMarkdown()) {
+    // Empty frame either way: nothing was derived, or the card to the left is
+    // already showing this. Printing it again inside a switched-off pane adds
+    // nothing the head does not already say.
+    if (!hasMarkdown() || onClipboard) {
         markInert(card);
         card.appendChild(head);
         return card;
@@ -577,13 +591,14 @@ function buildMarkdownCard() {
 
 function buildSimpleHtmlCard() {
     const card = el('div', 'card card--derived card--simple-html');
-    if (state.htmlDone) markSpent(card);
+    const onClipboard = simpleHtmlOnClipboard();
 
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-derived', 'Simple HTML'));
-    if (hasSimpleHtml()) appendDerivedMeta(head, state.equivalents.simpleHtml, !state.htmlDone);
+    if (hasSimpleHtml()) appendDerivedMeta(head, state.equivalents.simpleHtml, !onClipboard);
+    if (onClipboard && !state.htmlDone) head.appendChild(el('span', 'card-flag', '· already in text/html'));
 
-    if (!hasSimpleHtml()) {
+    if (!hasSimpleHtml() || onClipboard) {
         markInert(card);
         card.appendChild(head);
         return card;
@@ -615,6 +630,7 @@ function buildGutter(row) {
 
     const done = isMd ? state.mdDone : state.htmlDone;
     const available = isMd ? hasMarkdown() : hasSimpleHtml();
+    const onClipboard = isMd ? mdOnClipboard() : simpleHtmlOnClipboard();
     const targetPresent = isMd ? state.plainPresent : state.htmlPresent;
     const target = isMd ? 'text/plain' : 'text/html';
     const sourceName = isMd ? 'Markdown' : 'Simple HTML';
@@ -627,13 +643,21 @@ function buildGutter(row) {
         button.textContent = targetPresent ? '✓ Replaced' : '✓ Added';
         button.disabled = true;
     } else {
+        // A write that would change nothing stays on the page, switched off with
+        // its reason underneath. Dropping the button instead would leave the row
+        // looking broken, and hide that the copy is already what it should be.
         button.textContent = targetPresent ? '← Replace' : '← Add';
-        button.disabled = !available;
-        button.addEventListener('click', () => applyReplace({ md: isMd, html: !isMd }));
+        button.disabled = !available || onClipboard;
+        if (!button.disabled) {
+            button.addEventListener('click', () => applyReplace({ md: isMd, html: !isMd }));
+        }
     }
     gutter.appendChild(button);
 
-    const hint = done ? target : available ? `${sourceName} into ${target}` : 'Nothing to move';
+    const hint = done ? target
+        : onClipboard ? `${target} already matches`
+            : available ? `${sourceName} into ${target}`
+                : 'Nothing to move';
     gutter.appendChild(el('div', 'replace-hint', hint));
 
     // "Replace both" straddles the seam between the two clipboard cards.
@@ -645,6 +669,10 @@ function buildGutter(row) {
         if (bothReplaced()) {
             both.classList.add('is-done');
             both.textContent = '✓ Both replaced';
+            both.disabled = true;
+        } else if (mdOnClipboard() && simpleHtmlOnClipboard()) {
+            // Both rows are already a no-op; so is doing them together.
+            both.textContent = '⇐ Replace both';
             both.disabled = true;
         } else {
             // The double arrow signals two entries moving at once.

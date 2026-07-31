@@ -4,7 +4,8 @@
  * Loads the extension's third-party libs (DOMPurify, Turndown, GFM plugin) into
  * the jsdom test environment and then `require`s the pure modules so tests can
  * call them directly:
- *   - pipeline.js     `htmlToMarkdown` / `gridToMarkdown` — the cmd+shift+U path
+ *   - pipeline.js     `htmlToMarkdown` / `gridToMarkdown` and their `…SimpleHtml`
+ *                     counterparts — the cmd+shift+U path
  *   - equivalents.js  `fromHtml` — what the inspector derives from the clipboard
  *
  * No code is duplicated from content.js or inspector.js. Those two modules are
@@ -37,6 +38,9 @@ function loadLibs() {
 function getPipeline() {
     if (cachedPipeline) return cachedPipeline;
     loadLibs();
+    // pipeline.js reaches for the global Equivalents to derive the Simple HTML,
+    // the same way the injected content script does.
+    getEquivalents();
 
     delete require.cache[require.resolve('../pipeline.js')];
     delete window.Pipeline;
@@ -56,6 +60,10 @@ function getEquivalents() {
 
 module.exports = {
     get htmlToMarkdown() { return getPipeline().htmlToMarkdown; },
+    get htmlToSimpleHtml() { return getPipeline().htmlToSimpleHtml; },
     get gridToMarkdown() { return getPipeline().gridToMarkdown; },
+    get gridToSimpleHtml() { return getPipeline().gridToSimpleHtml; },
     get fromHtml() { return getEquivalents().fromHtml; },
+    get toSimpleHtml() { return getEquivalents().toSimpleHtml; },
+    get isSameHtmlEntry() { return getEquivalents().isSameHtmlEntry; },
 };

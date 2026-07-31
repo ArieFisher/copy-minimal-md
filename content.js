@@ -1,16 +1,32 @@
 // Print version info to console on load
 console.log(`Docs Markdown Cleaner version: ${chrome.runtime.getManifest().version}`);
 
+/**
+ * Write the cleaned copy back to the clipboard.
+ *
+ * A table goes out as both entries: the Markdown in text/plain, and the Simple
+ * HTML in text/html so a paste into a rich-text editor lands a real table rather
+ * than a screenful of pipes. Anything else is text/plain alone — writeText drops
+ * the source app's text/html, which is the point of the hotkey.
+ */
+async function writeCleaned(markdown, simpleHtml) {
+    if (!simpleHtml) {
+        await navigator.clipboard.writeText(markdown);
+        return;
+    }
+    await navigator.clipboard.write([
+        new ClipboardItem({
+            "text/plain": new Blob([markdown], { type: "text/plain" }),
+            "text/html": new Blob([simpleHtml], { type: "text/html" })
+        })
+    ]);
+}
+
 // Register the cmd+shift+U variant of the TSV auto-write listener once per page.
 if (!window.__tsvCleanerListenerRegistered) {
     window.__tsvCleanerListenerRegistered = true;
     TsvDetector.addListener(async (d) => {
-        await navigator.clipboard.write([
-            new ClipboardItem({
-                "text/plain": new Blob([d.markdown], { type: "text/plain" }),
-                "text/html": new Blob([d.simpleHtml], { type: "text/html" })
-            })
-        ]);
+        await writeCleaned(d.markdown, d.simpleHtml);
     });
 }
 
@@ -115,8 +131,9 @@ if (!window.__tsvCleanerListenerRegistered) {
                 console.groupCollapsed("Docs Cleaner: Processing HTML...");
 
                 const markdown = Pipeline.htmlToMarkdown(htmlText, { gridResult });
+                const simpleHtml = Pipeline.htmlToSimpleHtml(htmlText, { gridResult });
 
-                await navigator.clipboard.writeText(markdown);
+                await writeCleaned(markdown, simpleHtml);
 
                 console.log("Docs Cleaner: Markdown written to clipboard.");
                 console.groupEnd();
@@ -132,7 +149,7 @@ if (!window.__tsvCleanerListenerRegistered) {
                 if (gridResult?.type === 'aria' || gridResult?.type === 'heuristic') {
                     console.log(`Docs Cleaner: ${gridResult.type} grid detected; synthesizing Markdown from DOM structure.`);
                     const gridMarkdown = Pipeline.gridToMarkdown(gridResult);
-                    await navigator.clipboard.writeText(gridMarkdown);
+                    await writeCleaned(gridMarkdown, Pipeline.gridToSimpleHtml(gridResult));
                     console.log("Docs Cleaner: Grid Markdown written to clipboard.");
                     flashSuccess("Grid Table Ready!");
                     return;

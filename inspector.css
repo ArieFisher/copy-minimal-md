@@ -250,23 +250,10 @@ body {
   border-color: var(--border-derived);
 }
 
-/* Spent: this equivalent now lives in the clipboard card to its left, so it is
-   no longer an alternative to act on. Still readable and scrollable — links
-   are the only thing actually switched off. */
-.card--derived.is-spent {
-  border-color: var(--border-neutral);
-  opacity: 0.55;
-}
-
-.card--derived.is-spent a {
-  pointer-events: none;
-  color: var(--text-secondary);
-}
-
-/* Inert: an unstructured copy derives nothing, so these cards hold no payload
-   and no action. They keep their place — the two columns stay aligned row for
-   row — but drop back to an empty frame, with no hairline ruling off a body
-   that isn't there. */
+/* Inert: the card has nothing to show — either nothing was derived, or what was
+   derived is already in the clipboard card to its left. It keeps its place, so
+   the two columns stay aligned row for row, but drops back to an empty frame
+   with no hairline ruling off a body that isn't there. */
 .card.is-inert {
   border-color: var(--border-neutral);
   background: none;
@@ -371,7 +358,6 @@ body {
 
 .card--html .card-render {
   padding: 18px 22px;
-  max-height: 300px;
 }
 
 .card-render ul,
@@ -478,6 +464,17 @@ body {
   font-size: 11.5px;
   line-height: 1.6;
   padding: 16px 20px;
+}
+
+/* The HTML row runs taller than the Markdown row — clipboard markup is verbose.
+   Both cards in a row have to cap at the same height: the row takes the height
+   of the taller card, and a body can only grow to fill its own cap. Cap the two
+   sides differently and the shorter one stops mid-card, leaving a band of bare
+   card below the pane. */
+.card--html .card-source,
+.card--html .card-render,
+.card--simple-html .card-source,
+.card--simple-html .card-render {
   max-height: 300px;
 }
 

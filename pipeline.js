@@ -4,12 +4,14 @@
  * Pure HTML → Markdown transformations extracted from content.js so they
  * can be unit/regression tested directly (no clipboard, no DOM injection).
  *
- * Exports `window.Pipeline = { htmlToMarkdown, gridToMarkdown }`.
+ * Exports `window.Pipeline = { htmlToMarkdown, htmlToSimpleHtml, gridToMarkdown,
+ * gridToSimpleHtml }`.
  *
  * Expected globals at call time:
  *   - DOMPurify        (lib/purify.min.js)
  *   - TurndownService  (lib/turndown.js)
  *   - turndownPluginGfm (lib/turndown-plugin-gfm.js)
+ *   - Equivalents      (equivalents.js — the Simple HTML derivation)
  *   - DOMParser        (browser global / jsdom)
  *
  * The full pipeline executes in two parts:
@@ -18,6 +20,11 @@
  *
  * When there is no `text/html` clipboard payload but `gridResult` reconstructed
  * a table, call `gridToMarkdown(gridResult)` instead.
+ *
+ * Tables get a second output. `htmlToSimpleHtml` / `gridToSimpleHtml` return the
+ * Simple HTML for the same copy, which content.js writes to the clipboard's
+ * text/html so a paste into a rich-text editor lands as a real table. Both
+ * return '' when the copy holds no table.
  */
 (function (global) {
     if (global.Pipeline) return;
@@ -26,11 +33,15 @@
     const ALLOWED_ATTR = ['href','src','alt','title'];
     const GRID_ALLOWED_TAGS = ['table','thead','tbody','tr','th','td'];
 
-    function htmlToMarkdown(htmlText, opts) {
-        const gridResult = (opts && opts.gridResult) || null;
-
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlText, 'text/html');
+    /**
+     * Fold the DOM-extracted grid into the clipboard document: swap jagged native
+     * tables for their DOM originals, or inject the reconstructed table where the
+     * clipboard HTML has none. Shared by both outputs, so the Markdown and the
+     * Simple HTML always describe the same repaired table.
+     *
+     * Mutates `doc`; returns whether anything changed.
+     */
+    function applyGridRepairs(doc, gridResult) {
         const tables = doc.querySelectorAll('table');
         let modified = false;
 
@@ -63,6 +74,16 @@
             }
             modified = true;
         }
+
+        return modified;
+    }
+
+    function htmlToMarkdown(htmlText, opts) {
+        const gridResult = (opts && opts.gridResult) || null;
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+        let modified = applyGridRepairs(doc, gridResult);
 
         const currentTables = doc.querySelectorAll('table');
 
@@ -123,6 +144,25 @@
         return markdown;
     }
 
+    /**
+     * The Simple HTML companion to htmlToMarkdown: the same repaired document,
+     * simplified rather than converted, for the clipboard's text/html entry.
+     *
+     * Only a table gets one, and the check is deliberately on this document
+     * rather than on what comes back — the two entries have to agree, so
+     * text/html carries a table exactly when the Markdown is one too. Prose
+     * returns '' and leaves the entry alone.
+     */
+    function htmlToSimpleHtml(htmlText, opts) {
+        const gridResult = (opts && opts.gridResult) || null;
+
+        const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+        const modified = applyGridRepairs(doc, gridResult);
+        if (doc.querySelectorAll('table').length === 0) return '';
+
+        return Equivalents.toSimpleHtml(modified ? doc.body.innerHTML : htmlText);
+    }
+
     function gridToMarkdown(gridResult) {
         if (!gridResult || !gridResult.tables || !gridResult.tables[0]) return '';
         const cleanHtml = DOMPurify.sanitize(gridResult.tables[0].outerHTML, {
@@ -135,7 +175,13 @@
         return td.turndown(cleanHtml);
     }
 
-    global.Pipeline = { htmlToMarkdown, gridToMarkdown };
+    /** Simple HTML for the path where the table came straight from the DOM. */
+    function gridToSimpleHtml(gridResult) {
+        if (!gridResult || !gridResult.tables || !gridResult.tables[0]) return '';
+        return Equivalents.toSimpleHtml(gridResult.tables[0].outerHTML);
+    }
+
+    global.Pipeline = { htmlToMarkdown, htmlToSimpleHtml, gridToMarkdown, gridToSimpleHtml };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) {

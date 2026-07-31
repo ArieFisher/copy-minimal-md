@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-const { fromHtml } = require('./_adapter.js');
+const { fromHtml, isSameHtmlEntry } = require('./_adapter.js');
 
 /** Collapse the whitespace the parser leaves behind so assertions read cleanly. */
 const squash = (html) => html.replace(/>\s+</g, '><').trim();
@@ -162,5 +162,49 @@ describe('Equivalents.fromHtml — ARIA grids', () => {
     // The stray row is not reconstructed; the sanitizer drops its wrappers and
     // keeps the text, same as any other unstructured content.
     expect(squash(simpleHtml)).toBe('<table><tr><td>real</td></tr></table>loose');
+  });
+});
+
+describe('Equivalents.isSameHtmlEntry', () => {
+  // What cmd+shift+U writes for a headerless table, and what the clipboard hands
+  // back on the next read — captured from Chromium on Linux, which restores the
+  // <tbody>. macOS also prefixes a <meta charset>, covered separately below.
+  // These cases are the rule, not one platform's output: each covers a kind of
+  // change the clipboard is known to make, so a platform we have not measured
+  // has to produce something new to escape them.
+  const WRITTEN = '<table><tr><td>header 1</td><td>header 2</td></tr><tr><td>text 1</td><td>12</td></tr></table>';
+  const READ_BACK = '<table><tbody><tr><td>header 1</td><td>header 2</td></tr><tr><td>text 1</td><td>12</td></tr></tbody></table>';
+
+  it('sees through the <tbody> the clipboard puts back', () => {
+    expect(isSameHtmlEntry(WRITTEN, READ_BACK)).toBe(true);
+  });
+
+  it('ignores a <meta charset> prefix', () => {
+    expect(isSameHtmlEntry(WRITTEN, '<meta charset="utf-8">' + READ_BACK)).toBe(true);
+  });
+
+  it('ignores fragment marker comments', () => {
+    expect(isSameHtmlEntry(WRITTEN, '<!--StartFragment-->' + READ_BACK + '<!--EndFragment-->')).toBe(true);
+  });
+
+  it('ignores whitespace between structural tags', () => {
+    expect(isSameHtmlEntry(WRITTEN, '<table>\n  <tbody>\n    <tr>\n      <td>header 1</td>\n<td>header 2</td>\n</tr>\n<tr><td>text 1</td><td>12</td></tr>\n</tbody>\n</table>\n')).toBe(true);
+  });
+
+  it('still counts inline styles as a difference', () => {
+    expect(isSameHtmlEntry(WRITTEN, READ_BACK.replace('<table>', '<table style="color: rgb(0,0,0)">'))).toBe(false);
+  });
+
+  it('still counts wrapper elements as a difference', () => {
+    expect(isSameHtmlEntry(WRITTEN, READ_BACK.replace('header 1', '<span class="x">header 1</span>'))).toBe(false);
+  });
+
+  it('still counts changed content as a difference', () => {
+    expect(isSameHtmlEntry(WRITTEN, READ_BACK.replace('text 1', 'text 9'))).toBe(false);
+    expect(isSameHtmlEntry(WRITTEN, READ_BACK.replace('<td>12</td>', ''))).toBe(false);
+  });
+
+  it('does not confuse a header row with a plain one', () => {
+    expect(isSameHtmlEntry(WRITTEN, READ_BACK.replace(/<td>header 1<\/td>/, '<th>header 1</th>'))).toBe(false);
   });
 });

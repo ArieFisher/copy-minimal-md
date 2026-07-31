@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-const { htmlToMarkdown, gridToMarkdown } = require('./_adapter.js');
+const { htmlToMarkdown, htmlToSimpleHtml, gridToMarkdown, gridToSimpleHtml } = require('./_adapter.js');
 
 describe('Pipeline.htmlToMarkdown', () => {
   it('converts simple HTML to Markdown', () => {
@@ -74,5 +74,61 @@ describe('Pipeline.gridToMarkdown', () => {
   it('returns empty string for null/empty input', () => {
     expect(gridToMarkdown(null)).toBe('');
     expect(gridToMarkdown({ type: 'aria', tables: [] })).toBe('');
+  });
+});
+
+describe('Pipeline.htmlToSimpleHtml', () => {
+  it('returns a table for a copy that has one', () => {
+    const html = htmlToSimpleHtml('<table><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>');
+    expect(html).toContain('<table>');
+    expect(html).toContain('<th>A</th>');
+    expect(html).toContain('<td>1</td>');
+  });
+
+  it('returns nothing for prose, so text/plain goes out alone', () => {
+    expect(htmlToSimpleHtml('<h1>Title</h1><p>Body</p>')).toBe('');
+    expect(htmlToSimpleHtml('')).toBe('');
+  });
+
+  it('leaves a headerless copy headerless, unlike the Markdown', () => {
+    // The Markdown has to invent a header row — GFM has no table without one.
+    // Simple HTML is under no such constraint and must not follow it.
+    const source = '<table><tr><td>Alice</td><td>30</td></tr><tr><td>Bob</td><td>25</td></tr></table>';
+    expect(htmlToMarkdown(source).trim().split('\n')[0]).toBe('| Alice | 30 |');
+
+    const html = htmlToSimpleHtml(source);
+    expect(html).not.toContain('<th>');
+    expect(html).not.toContain('<thead>');
+    expect(html).toContain('<td>Alice</td>');
+  });
+
+  it('carries the grid repair into the HTML, same as the Markdown', () => {
+    const domTable = document.createElement('table');
+    domTable.innerHTML = '<thead><tr><th>P</th><th>Q</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody>';
+    const gridResult = { type: 'aria', tables: [domTable] };
+
+    const html = htmlToSimpleHtml('<div>flat text from div grid</div>', { gridResult });
+    expect(html).toContain('<th>P</th>');
+    expect(html).toContain('<td>2</td>');
+    expect(html).not.toContain('flat text');
+  });
+
+  it('stays empty when a grid copy has no table anywhere', () => {
+    expect(htmlToSimpleHtml('<div>flat text</div>', { gridResult: null })).toBe('');
+  });
+});
+
+describe('Pipeline.gridToSimpleHtml', () => {
+  it('emits a table from a reconstructed grid table', () => {
+    const t = document.createElement('table');
+    t.innerHTML = '<thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody>';
+    const html = gridToSimpleHtml({ type: 'aria', tables: [t] });
+    expect(html).toContain('<th>A</th>');
+    expect(html).toContain('<td>2</td>');
+  });
+
+  it('returns empty string for null/empty input', () => {
+    expect(gridToSimpleHtml(null)).toBe('');
+    expect(gridToSimpleHtml({ type: 'aria', tables: [] })).toBe('');
   });
 });
