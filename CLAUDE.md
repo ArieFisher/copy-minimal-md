@@ -76,3 +76,23 @@ when the pull request is **created**, whether or not it was written. Editing
 the body afterwards does not trigger it again. So: create the pull request,
 read it back, and if the footer is there, update the body with your text plus
 the signature above. Then read it back once more and confirm.
+
+This applies to a pull request you have just opened, and to nothing else.
+
+## Never touch anything already merged
+
+Once work is merged it is a record of what was proposed and accepted, and it
+stays as it is. That covers:
+
+- **Merged and closed pull requests** — body, title, comments. Not to fix a
+  footer, not to correct a typo, not to bring one in line with a convention
+  adopted later.
+- **Merged branches** — do not commit to them, rewrite them, rebase them or
+  delete them.
+- **Merged commits, tags, released versions** — the same.
+
+New rules apply to new work. A convention adopted today does not reach back.
+
+If something already merged genuinely needs changing, say what is wrong and
+let the repository owner decide. Only act when told to, for that specific
+thing — being told to fix one is not standing permission to fix others.
