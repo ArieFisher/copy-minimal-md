@@ -331,20 +331,49 @@ function buildSourcePre(key, text) {
 }
 
 /**
- * Insert untrusted HTML as a rendered preview. Styles and classes are dropped
- * so the card's own typography governs — the Source view is where the payload
- * is shown verbatim.
+ * Run an untrusted style attribute past the inline-style policy, and drop the
+ * attribute outright if nothing survives.
  */
-function renderHtmlInto(node, html) {
+function filterStyleAttribute(node, data) {
+    if (data.attrName !== 'style') return;
+    data.attrValue = InlineStyle.filter(data.attrValue);
+    if (!data.attrValue) data.keepAttr = false;
+}
+
+/**
+ * Insert untrusted HTML as a rendered preview.
+ *
+ * `keepStyles` is for the clipboard's own text/html: that card is there to show
+ * what is really on the clipboard, and for a copy out of Sheets or Word the
+ * formatting is carried entirely by inline styles. Strip those and the card
+ * renders the same bare table as the Simple HTML beside it, which reads as "you
+ * lose nothing" next to a header saying the payload is 44× the text it carries.
+ * InlineStyle.filter says what a declaration is allowed to do.
+ *
+ * The derived cards render without it. Nothing they show came off the clipboard
+ * — it is this tool's own output, and it is set in this tool's typography.
+ *
+ * Dropped either way: <style> elements, which have no scope and would restyle
+ * the inspector around the card, and class/id, which let a payload reach the
+ * inspector's own rules by name.
+ */
+function renderHtmlInto(node, html, { keepStyles = false } = {}) {
     if (typeof DOMPurify === 'undefined') {
         node.textContent = html || '';
         return;
     }
-    node.innerHTML = DOMPurify.sanitize(html || '', {
-        FORBID_TAGS: ['style'],
-        FORBID_ATTR: ['style', 'class', 'id'],
-        ALLOW_DATA_ATTR: false
-    });
+
+    const styleable = keepStyles && typeof InlineStyle !== 'undefined';
+    if (styleable) DOMPurify.addHook('uponSanitizeAttribute', filterStyleAttribute);
+    try {
+        node.innerHTML = DOMPurify.sanitize(html || '', {
+            FORBID_TAGS: ['style'],
+            FORBID_ATTR: styleable ? ['class', 'id'] : ['style', 'class', 'id'],
+            ALLOW_DATA_ATTR: false
+        });
+    } finally {
+        if (styleable) DOMPurify.removeHook('uponSanitizeAttribute');
+    }
 }
 
 /* --------------------------------------------------------------- rendering */
@@ -512,7 +541,7 @@ function buildHtmlCard() {
         card.appendChild(buildSourcePre('html', source || '[Empty String]'));
     } else {
         const body = el('div', 'card-render');
-        renderHtmlInto(body, state.current.html);
+        renderHtmlInto(body, state.current.html, { keepStyles: true });
         card.appendChild(body);
     }
 

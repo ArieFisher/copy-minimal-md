@@ -24,7 +24,12 @@ const EXTENSION_PATH = path.resolve(__dirname, '..', '..');
 
 function startServer() {
   const pages = new Map();
+  // Every path asked for, served or not. A test that puts a URL in a clipboard
+  // payload and expects nothing to load asserts against this: a request that
+  // 404s still got made, and getting made is the thing being tested.
+  const requests = [];
   const server = http.createServer((req, res) => {
+    requests.push(req.url);
     const html = pages.get(req.url);
     if (html === undefined) {
       res.writeHead(404, { 'content-type': 'text/plain' });
@@ -40,6 +45,7 @@ function startServer() {
       resolve({
         baseUrl: `http://127.0.0.1:${port}`,
         servePage: (pathname, html) => pages.set(pathname, html),
+        requests,
         close: () => { server.closeAllConnections(); return new Promise((r) => server.close(r)); },
       });
     });
