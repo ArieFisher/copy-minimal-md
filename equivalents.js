@@ -5,7 +5,7 @@
  * inspector.js so the derivation can be unit tested directly, with no clipboard
  * and no chrome APIs in the way.
  *
- * Exports `window.Equivalents = { fromHtml }`.
+ * Exports `window.Equivalents = { fromHtml, toSimpleHtml }`.
  *
  * Expected globals at call time:
  *   - DOMPurify         (lib/purify.min.js)
@@ -26,7 +26,8 @@
     const ALLOWED_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'u', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'br', 'hr', 'blockquote', 'code', 'pre'];
     const ALLOWED_ATTR = ['href', 'src', 'alt', 'title'];
 
-    function fromHtml(htmlText) {
+    /** The source repairs, applied once for whatever is derived from them. */
+    function repair(htmlText) {
         const doc = new DOMParser().parseFromString(htmlText, 'text/html');
         let modified = false;
         let sourceType = 'HTML';
@@ -38,7 +39,21 @@
             sourceType = 'HTML (Extracted ARIA Table)';
         }
 
-        const repaired = modified ? doc.body.innerHTML : htmlText;
+        return { repaired: modified ? doc.body.innerHTML : htmlText, sourceType };
+    }
+
+    /**
+     * The Simple HTML alone, for callers with no use for the Markdown: the
+     * cmd+shift+U path writes it straight into the clipboard's text/html. Sharing
+     * this with `fromHtml` is the point — what the inspector previews and what
+     * the hotkey writes are then the same derivation, and cannot drift apart.
+     */
+    function toSimpleHtml(htmlText) {
+        return simplifyTables(sanitize(repair(htmlText).repaired));
+    }
+
+    function fromHtml(htmlText) {
+        const { repaired, sourceType } = repair(htmlText);
 
         const simpleHtml = simplifyTables(sanitize(repaired));
 
@@ -223,7 +238,7 @@
         );
     }
 
-    global.Equivalents = { fromHtml };
+    global.Equivalents = { fromHtml, toSimpleHtml };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) {

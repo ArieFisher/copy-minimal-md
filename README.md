@@ -92,6 +92,7 @@ By contrast, if you copy with this library, it takes the **selected values** in 
 *   **Strips inline styles**: Removes font families, colors, and background highlights
 *   **Preserves structure**: Headings, bold, italics, links, lists, and tables
 *   **Clipboard integration**: Automatically updates the clipboard with clean Markdown
+*   **Tables paste as tables**: A copied table also goes to the clipboard as minimal HTML, so pasting into Gmail, Docs or Notion lands a real table rather than a screenful of pipes
 *   **Jagged tables**: Copies selected values in the correct structure
 *   **ARIA tables**: Many sites no longer use traditional HTML `<table>` tags, but instead construct what looks like tables out of sophisticated HTML.
 *   **TSV tables**: When users copy a table, many websites will only give the clipboard tab-separated values. This library converts those into traditional tables for easier pasting.
@@ -104,7 +105,7 @@ By contrast, if you copy with this library, it takes the **selected values** in 
 2.  Press the keyboard shortcut:
     *   **Mac**: `Cmd + Shift + U`
     *   **Windows/Linux**: `Ctrl + Shift + U`
-3.  **Paste** (`Cmd+V` / `Ctrl+V`) — pastes clean Markdown
+3.  **Paste** (`Cmd+V` / `Ctrl+V`) — pastes clean Markdown, or a real table if you copied one and paste into a rich-text editor
 
 ## How It Works
 
@@ -120,7 +121,7 @@ By contrast, if you copy with this library, it takes the **selected values** in 
     *   **Synthesis**: If an ARIA grid was detected but the browser provided no HTML payload, the script synthesizes a table directly from the DOM extraction.
 5.  **Markdown Conversion**: Converts the final sanitized HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown).
 6.  **TSV Fallback**: If no HTML is present but the plain text looks like Tab-Separated Values (TSV), it converts the TSV data directly into a Markdown table.
-7.  **Clipboard Update**: Writes the final clean Markdown back to the clipboard.
+7.  **Clipboard Update**: Writes the final clean Markdown back to the clipboard as `text/plain`. If the copy is a table, the `text/html` entry is populated too, with the same "Simple HTML" table the Clipboard Inspector previews — so a paste into a rich-text editor lands a real table. A copy with no table is written as plain text alone, which clears whatever `text/html` the source page had put there.
 
 ## Dependencies
 
