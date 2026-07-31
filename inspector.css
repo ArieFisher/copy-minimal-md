@@ -263,6 +263,20 @@ body {
   color: var(--text-secondary);
 }
 
+/* Inert: an unstructured copy derives nothing, so these cards hold no payload
+   and no action. They keep their place — the two columns stay aligned row for
+   row — but drop back to an empty frame, with no hairline ruling off a body
+   that isn't there. */
+.card.is-inert {
+  border-color: var(--border-neutral);
+  background: none;
+  opacity: 0.55;
+}
+
+.card.is-inert .card-head {
+  border-bottom: none;
+}
+
 .card-head {
   display: flex;
   align-items: baseline;
