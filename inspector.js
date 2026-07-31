@@ -80,6 +80,19 @@ const bothReplaced = () => state.mdDone && state.htmlDone;
 const hasMarkdown = () => !!state.equivalents.markdown;
 const hasSimpleHtml = () => !!state.equivalents.simpleHtml;
 
+/**
+ * The clipboard already holds this equivalent, so moving it across would write
+ * the same bytes back. True after a replace here, and true from the outset for
+ * anything copied with cmd+shift+U, which writes these same entries itself.
+ *
+ * Compared exactly. A near-miss — say a platform that hands newlines back as
+ * CRLF — leaves the action enabled, which is the safe way to be wrong: the user
+ * can still perform a write that changes nothing, rather than being locked out
+ * of one that would have.
+ */
+const mdOnClipboard = () => hasMarkdown() && state.equivalents.markdown === state.current.plain;
+const simpleHtmlOnClipboard = () => hasSimpleHtml() && state.equivalents.simpleHtml === state.current.html;
+
 /* ------------------------------------------------------------- derivation */
 
 /**
@@ -500,9 +513,11 @@ function buildHtmlCard() {
 /* --- equivalent cards (column 3) --- */
 
 /**
- * Once an equivalent has been moved into the clipboard it is spent: the left
- * card now holds it, so it is no longer something to act on. It stays readable
- * and scrollable, but reads as disabled.
+ * An equivalent the clipboard already holds is spent: the left card is showing
+ * the same bytes, so this one is no longer something to act on. Either the user
+ * moved it there, or it arrived that way — cmd+shift+U writes the Markdown and
+ * the Simple HTML itself for a table copy. It stays readable and scrollable,
+ * but reads as disabled.
  */
 function markSpent(card) {
     card.classList.add('is-spent');
@@ -545,11 +560,15 @@ function appendDerivedMeta(head, equivalentText, showSavings) {
 
 function buildMarkdownCard() {
     const card = el('div', 'card card--derived card--markdown');
-    if (state.mdDone) markSpent(card);
+    const onClipboard = mdOnClipboard();
+    if (onClipboard) markSpent(card);
 
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-derived', 'Markdown'));
-    if (hasMarkdown()) appendDerivedMeta(head, state.equivalents.markdown, !state.mdDone);
+    if (hasMarkdown()) appendDerivedMeta(head, state.equivalents.markdown, !onClipboard);
+    // Say why the card is switched off. After a replace the banner and the left
+    // card's "· updated" already account for it.
+    if (onClipboard && !state.mdDone) head.appendChild(el('span', 'card-flag', '· already in text/plain'));
 
     if (!hasMarkdown()) {
         markInert(card);
@@ -577,11 +596,13 @@ function buildMarkdownCard() {
 
 function buildSimpleHtmlCard() {
     const card = el('div', 'card card--derived card--simple-html');
-    if (state.htmlDone) markSpent(card);
+    const onClipboard = simpleHtmlOnClipboard();
+    if (onClipboard) markSpent(card);
 
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-derived', 'Simple HTML'));
-    if (hasSimpleHtml()) appendDerivedMeta(head, state.equivalents.simpleHtml, !state.htmlDone);
+    if (hasSimpleHtml()) appendDerivedMeta(head, state.equivalents.simpleHtml, !onClipboard);
+    if (onClipboard && !state.htmlDone) head.appendChild(el('span', 'card-flag', '· already in text/html'));
 
     if (!hasSimpleHtml()) {
         markInert(card);
@@ -615,6 +636,7 @@ function buildGutter(row) {
 
     const done = isMd ? state.mdDone : state.htmlDone;
     const available = isMd ? hasMarkdown() : hasSimpleHtml();
+    const onClipboard = isMd ? mdOnClipboard() : simpleHtmlOnClipboard();
     const targetPresent = isMd ? state.plainPresent : state.htmlPresent;
     const target = isMd ? 'text/plain' : 'text/html';
     const sourceName = isMd ? 'Markdown' : 'Simple HTML';
@@ -627,13 +649,21 @@ function buildGutter(row) {
         button.textContent = targetPresent ? '✓ Replaced' : '✓ Added';
         button.disabled = true;
     } else {
+        // A write that would change nothing stays on the page, switched off with
+        // its reason underneath. Dropping the button instead would leave the row
+        // looking broken, and hide that the copy is already what it should be.
         button.textContent = targetPresent ? '← Replace' : '← Add';
-        button.disabled = !available;
-        button.addEventListener('click', () => applyReplace({ md: isMd, html: !isMd }));
+        button.disabled = !available || onClipboard;
+        if (!button.disabled) {
+            button.addEventListener('click', () => applyReplace({ md: isMd, html: !isMd }));
+        }
     }
     gutter.appendChild(button);
 
-    const hint = done ? target : available ? `${sourceName} into ${target}` : 'Nothing to move';
+    const hint = done ? target
+        : onClipboard ? `${target} already matches`
+            : available ? `${sourceName} into ${target}`
+                : 'Nothing to move';
     gutter.appendChild(el('div', 'replace-hint', hint));
 
     // "Replace both" straddles the seam between the two clipboard cards.
@@ -645,6 +675,10 @@ function buildGutter(row) {
         if (bothReplaced()) {
             both.classList.add('is-done');
             both.textContent = '✓ Both replaced';
+            both.disabled = true;
+        } else if (mdOnClipboard() && simpleHtmlOnClipboard()) {
+            // Both rows are already a no-op; so is doing them together.
+            both.textContent = '⇐ Replace both';
             both.disabled = true;
         } else {
             // The double arrow signals two entries moving at once.
