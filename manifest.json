@@ -3,7 +3,6 @@
     "name": "Docs Markdown Cleaner",
     "description": "Converts copied web content to Markdown and inspects raw clipboard contents.",
     "version": "0.8.0",
-    "version_name": "0.7.2",
     "permissions": [
         "activeTab",
         "scripting",
