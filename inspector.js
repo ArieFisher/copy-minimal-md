@@ -440,16 +440,23 @@ function buildPlainCard() {
     const head = el('div', 'card-head');
     head.appendChild(el('span', 'card-name-mime', 'text/plain'));
 
+    // No "not present" marker: the column heading above has already said which
+    // entries this copy carried, and saying it twice is not saying it better.
     if (state.plainPresent || state.mdDone) {
         head.appendChild(el('span', 'card-meta', formatBytes(byteLength(state.current.plain))));
-    } else {
-        head.appendChild(el('span', 'card-meta', 'not present'));
     }
     if (state.mdDone) head.appendChild(el('span', 'card-flag', '· updated'));
 
     if (!state.plainPresent && !state.mdDone) {
         card.appendChild(head);
-        card.appendChild(el('div', 'card-empty', 'This copy did not include a text/plain entry.'));
+        // Name the missing entry only while something is waiting to fill it —
+        // the gutter is offering to add the Markdown. With nothing to add, the
+        // card is inert, same as its text/html neighbour.
+        if (hasMarkdown()) {
+            card.appendChild(el('div', 'card-empty', 'This copy did not include a text/plain entry.'));
+        } else {
+            markInert(card);
+        }
         return card;
     }
 
@@ -480,8 +487,6 @@ function buildHtmlCard() {
                 head.appendChild(el('span', 'card-note', `· ${ratio}× the text it carries`));
             }
         }
-    } else {
-        head.appendChild(el('span', 'card-meta', 'not present'));
     }
     if (state.htmlDone) head.appendChild(el('span', 'card-flag', '· updated'));
 

@@ -6,17 +6,25 @@ const { test, expect } = require('./fixtures.js');
 const HOTKEY_PLAIN = '| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bob | 25 |';
 const HOTKEY_HTML = '<table><tbody><tr><th>Name</th><th>Age</th></tr><tr><td>Alice</td><td>30</td></tr><tr><td>Bob</td><td>25</td></tr></tbody></table>';
 
-/** Put both entries on the real clipboard from a real page, then open the inspector. */
-async function inspectClipboard({ context, server, extensionId }, { plain, html }) {
+/** A 1×1 transparent PNG, for seeding a copy that carries no text at all. */
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+/** Put the given entries on the real clipboard from a real page, then open the inspector. */
+async function inspectClipboard({ context, server, extensionId }, { plain, html, png }) {
   server.servePage('/seed.html', '<!doctype html><html><body>seed</body></html>');
   const seeder = await context.newPage();
   await seeder.goto(`${server.baseUrl}/seed.html`);
   await seeder.bringToFront();
-  await seeder.evaluate(async ([p, h]) => {
-    const payload = { 'text/plain': new Blob([p], { type: 'text/plain' }) };
+  await seeder.evaluate(async ([p, h, image]) => {
+    const payload = {};
+    if (p) payload['text/plain'] = new Blob([p], { type: 'text/plain' });
     if (h) payload['text/html'] = new Blob([h], { type: 'text/html' });
+    if (image) {
+      const bytes = Uint8Array.from(atob(image), (c) => c.charCodeAt(0));
+      payload['image/png'] = new Blob([bytes], { type: 'image/png' });
+    }
     await navigator.clipboard.write([new ClipboardItem(payload)]);
-  }, [plain, html]);
+  }, [plain, html, png]);
 
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/inspector.html`);
@@ -73,6 +81,37 @@ test('sees through the <tbody> the clipboard restores on a headerless table', as
   for (const btn of await page.locator('.replace-btn').all()) {
     await expect(btn).toBeDisabled();
   }
+});
+
+test('a copy with no text at all leaves both clipboard cards inert', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, { png: PNG_1PX });
+
+  await expect(page.locator('.col-heading-sub').first()).toHaveText(/No text entries on the clipboard/);
+
+  // Neither entry is present and nothing is waiting to fill either, so both read
+  // the same way — an empty frame, with no line inside explaining itself.
+  await expect(page.locator('.card--plain')).toHaveClass(/is-inert/);
+  await expect(page.locator('.card--html')).toHaveClass(/is-inert/);
+  await expect(page.locator('.card--plain .card-empty, .card--html .card-empty')).toHaveCount(0);
+  // The heading says which entries the copy carried; the heads do not repeat it.
+  // (Scoped to the two text cards — the image below still reports its size.)
+  await expect(page.locator('.card--plain .card-meta, .card--html .card-meta')).toHaveCount(0);
+
+  // The image itself still shows up below.
+  await expect(page.locator('.extras')).toContainText('image/png');
+});
+
+test('names the missing entry while an equivalent is waiting to fill it', async ({ context, server, extensionId }) => {
+  // HTML only: text/plain is absent, but the Markdown can be added to it, so the
+  // card says what is missing next to the offer instead of going inert.
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    html: '<h1 style="color:red">Heading</h1><p>some <b>text</b></p>',
+  });
+
+  await expect(page.locator('.card--plain')).not.toHaveClass(/is-inert/);
+  await expect(page.locator('.card--plain .card-empty')).toHaveText(/did not include a text\/plain entry/);
+  await expect(page.locator('.replace-btn').first()).toBeEnabled();
+  await expect(page.locator('.replace-hint').first()).toHaveText(/Markdown into text\/plain/);
 });
 
 test('keeps the actions live when the equivalents would change something', async ({ context, server, extensionId }) => {
