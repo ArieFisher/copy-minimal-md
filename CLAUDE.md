@@ -33,6 +33,8 @@ may lose the reader at the top. Instead:
   going on to the next.
 - Name the exact line of code only once the idea it implements is already
   understood.
+- Explain a metaphor or coined term the first time it is used, and confirm
+  it landed before building on it.
 
 This applies to all communications with the owner, including explanations, routine status
 updates, and summaries of completed work.
