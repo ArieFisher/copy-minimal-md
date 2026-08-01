@@ -54,23 +54,17 @@ Instead:
  * 'Paste from Markdown' into a Google Doc (or regular paste into many other tools)
 
 
-## Why have I developed this tool?
+## Why this tool
 
-**Learning:** To experiment with Agentic Development applied to a (minor) irritant.
+**Unique use case:** Some alternatives (like [Markdownload](https://github.com/deathau/markdownload)) or the very cool [Jina.ai](https://jina.ai/reader/) extract full pages and save them as files. I wanted to use/create a very simple clipboard utility.
 
-**Security:** I try to avoid installing Chrome Extensions and software from unknown authors.
-
-**Unique use case:** Some alternatives (like [Markdownload](https://github.com/deathau/markdownload)) or the very cool [Jina.ai](https://jina.ai/reader/) extract full pages and save them as files. I wanted to use/create a very simple clipboard utility.  note: simplicity is not synonymous with 'easy'.
-
-**Features:** It includes some clever features, like handling 'jagged' table selection.
-
-e.g. [income statement](https://en.wikipedia.org/wiki/Income_statement#:~:text=Full%20consolidated%20statement%20of%20operations), contains a table:
+Handles persistent issues with traditional 'copy' command such as 'jagged' table selection. For example:
 
 | 2019 ($) | 2020 ($) | 2021 ($) |
 | --- | --- | -- |
 | 5,000 | 10,000 | 25,000 |
 
-To copy the 2020 revenue, you click into the `2020 ($)` cell and drag until you have highlighted the value, then press `copy` (`ctrl\cmd-c`).
+Click on the `2020 ($)` cell and drag down to highlight the rest of this line and the value below it, and press copy.
 
 The **wrong information** goes into your clipboard (try it).
 

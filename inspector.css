@@ -356,8 +356,16 @@ body {
   flex: 1;
 }
 
+/* The only pane that renders CSS it did not write — the clipboard's text/html
+   keeps its own inline styles, so the card shows the formatting the payload
+   actually carries. Containment is what keeps that CSS inside the card: a
+   contained box is the containing block for its fixed- and absolutely-
+   positioned descendants, so nothing in a payload can lay itself over the page
+   chrome or the replace controls. `layout paint` only — `size` would let the
+   payload dictate the card's height. */
 .card--html .card-render {
   padding: 18px 22px;
+  contain: layout paint;
 }
 
 .card-render ul,
