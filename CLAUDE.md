@@ -20,6 +20,24 @@ Tests here run on Linux, and most users are on macOS. Something a Linux run does
 not do, the product may still do. Do not conclude "the browser doesn't do that"
 from one platform — say which platform you measured, or go and check the other.
 
+## Explaining things
+
+When walking the owner through how something works — a diagnosis, a pipeline,
+a piece of unfamiliar machinery — do not deliver it as one big writeup that
+loses the reader at the top. Instead:
+
+- Break it into small parts, one idea per part, ordered so each builds on the
+  last.
+- Start from what the reader can see for themselves (the actual HTML, the
+  actual output), and assume less background than seems necessary.
+- End each part by checking understanding, and wait for confirmation before
+  going on to the next.
+- Name the exact line of code only once the idea it implements is already
+  understood.
+
+This applies to explanations the owner asks for, not to routine status
+updates or summaries of completed work.
+
 ## Branches and commit authorship
 
 Branch names take a standard prefix — `feature/`, `bugfix/`, `hotfix/`,
