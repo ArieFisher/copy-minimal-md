@@ -244,3 +244,79 @@ test('a payload cannot restyle the inspector around it', async ({ context, serve
   });
   expect(inside).toBe(true);
 });
+
+/* ------------------------------------------------------------ pane geometry */
+
+/**
+ * Distance from each card's bottom edge to the bottom of the pane inside it,
+ * keyed by card. A card with no pane is skipped — an inert card is a head and
+ * an empty frame, and there is nothing in it to fill.
+ */
+function paneGaps(page) {
+  return page.evaluate(() => {
+    const gaps = {};
+    for (const card of document.querySelectorAll('.card')) {
+      const pane = card.querySelector('.card-render, .card-source');
+      if (!pane) continue;
+      const name = [...card.classList].find(
+        (c) => c.startsWith('card--') && c !== 'card--clipboard' && c !== 'card--derived'
+      );
+      gaps[name] = Math.round(card.getBoundingClientRect().bottom - pane.getBoundingClientRect().bottom);
+    }
+    return gaps;
+  });
+}
+
+test('every pane fills the card it sits in, in both views', async ({ context, server, extensionId }) => {
+  // A row is as tall as its taller card, so the shorter card's pane has to grow
+  // into space its own content never asked for. Two separate things have to
+  // hold for that, and they fail in different ways, so they are checked apart.
+  //
+  // The fixture keeps the derived side well under its cap: the left card
+  // renders the 40pt the payload asks for, the right strips it and renders
+  // small. Below the cap, flex-grow is the only thing that can fill the card —
+  // at the cap the cap does it, and a missing `flex: 1` would go unnoticed.
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    plain: 'alpha\tbeta\ngamma\tdelta',
+    html: '<table><tbody>'
+        + '<tr><td style="font-size: 40pt">alpha</td><td style="font-size: 40pt">beta</td></tr>'
+        + '<tr><td style="font-size: 40pt">gamma</td><td style="font-size: 40pt">delta</td></tr>'
+        + '</tbody></table>',
+  });
+
+  // (1) Paired cards cap at the same height — the invariant the CSS comment
+  // names. Exact, and independent of what is on the clipboard. Split the cap
+  // and the shorter side strands tens of pixels.
+  const caps = await page.evaluate(() => {
+    const capOf = (sel) => getComputedStyle(document.querySelector(sel)).maxHeight;
+    return {
+      htmlRow: [capOf('.card--html .card-render'), capOf('.card--simple-html .card-render')],
+      plainRow: [capOf('.card--plain .card-source'), capOf('.card--markdown .card-render')],
+    };
+  });
+  expect(caps.htmlRow[0]).toBe(caps.htmlRow[1]);
+  expect(caps.plainRow[0]).toBe(caps.plainRow[1]);
+
+  // (2) Every pane reaches the bottom of its card. The row has to be uneven for
+  // this to prove anything, so check that first.
+  const content = await page.evaluate(() => ({
+    html: document.querySelector('.card--html .card-render').scrollHeight,
+    simple: document.querySelector('.card--simple-html .card-render').scrollHeight,
+    simpleCap: parseFloat(getComputedStyle(document.querySelector('.card--simple-html .card-render')).maxHeight),
+  }));
+  expect(content.html).toBeGreaterThan(content.simple);
+  expect(content.simple).toBeLessThan(content.simpleCap);
+
+  // 1px of the gap is the card's own border. Soft, so a broken row names every
+  // card it stranded rather than stopping at the first.
+  for (const [card, gap] of Object.entries(await paneGaps(page))) {
+    expect.soft(gap, `${card}, rendered view`).toBeLessThanOrEqual(2);
+  }
+
+  // The source view swaps every pane for a <pre> that has to fill the same way.
+  await page.locator('#view-toggle .segment[data-view="source"]').click();
+  await expect(page.locator('.card--html .card-source')).toBeVisible();
+  for (const [card, gap] of Object.entries(await paneGaps(page))) {
+    expect.soft(gap, `${card}, source view`).toBeLessThanOrEqual(2);
+  }
+});
