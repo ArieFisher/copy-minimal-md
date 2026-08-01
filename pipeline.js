@@ -87,8 +87,11 @@
 
         const currentTables = doc.querySelectorAll('table');
 
-        // Google Sheets: block-level <div>s inside cells produce extra newlines in Turndown.
-        // Replace with inline <span>s.
+        // div is in ALLOWED_TAGS, so block boundaries survive sanitize — which
+        // means a <div> left inside a cell would survive too, and split a table
+        // row across lines and break the Markdown table syntax. Inlining cell
+        // divs into <span>s here, before sanitize runs, is what keeps that block
+        // break out of the table: sanitize never gets a div to preserve there.
         Array.from(doc.querySelectorAll('td div, th div')).forEach(div => {
             const span = doc.createElement('span');
             span.append(...div.childNodes);
