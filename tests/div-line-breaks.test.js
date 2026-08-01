@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-const { htmlToMarkdown } = require('./_adapter.js');
+const { htmlToMarkdown, htmlToSimpleHtml } = require('./_adapter.js');
 
 const html = readFileSync(__dirname + '/fixtures/google-news-div-prose/input.html', 'utf8');
 
@@ -86,5 +86,71 @@ describe('table cells stay on one line while prose divs still break', () => {
     expect(firstLine).toBeDefined();
     expect(secondLine).toBeDefined();
     expect(firstLine).not.toBe(secondLine);
+  });
+});
+
+// A cell that once glued its divs into one run of text (`line1line2`) now
+// degrades that lost break into a <br> — GFM's only legal way to spell a
+// line break inside a table cell. turndown-plugin-gfm passes a <br> already
+// inside a cell through untouched, so this is enough to make the break
+// survive the round trip through Turndown.
+describe('multi-div cells degrade the lost break to <br>, not glued text', () => {
+  it('joins two sibling divs in a cell with a <br>, row still on one line', () => {
+    const md = htmlToMarkdown(
+      '<table><thead><tr><th>X</th></tr></thead><tbody>' +
+      '<tr><td><div>line one</div><div>line two</div></td></tr>' +
+      '</tbody></table>'
+    ).trim();
+
+    expect(md).toContain('| line one<br>line two |');
+    // The row is exactly one line — no bare newline snuck into the cell.
+    expect(md.split('\n').filter((l) => l.includes('line one'))).toHaveLength(1);
+  });
+
+  it('leaves a single-div cell exactly as before: no <br> anywhere', () => {
+    const md = htmlToMarkdown(
+      '<table><thead><tr><th>X</th></tr></thead><tbody>' +
+      '<tr><td><div>line one</div></td></tr>' +
+      '</tbody></table>'
+    ).trim();
+
+    expect(md).toContain('| line one |');
+    expect(md).not.toContain('<br>');
+  });
+
+  it('does not double a <br> the source already had between two divs', () => {
+    const md = htmlToMarkdown(
+      '<table><thead><tr><th>X</th></tr></thead><tbody>' +
+      '<tr><td><div>line one</div><br><div>line two</div></td></tr>' +
+      '</tbody></table>'
+    ).trim();
+
+    expect(md).toContain('| line one<br>line two |');
+    expect(md.match(/<br>/g)).toHaveLength(1);
+  });
+
+  it('yields at most one <br> per visual boundary when divs are nested', () => {
+    // The outer div wraps a lone inner div for "line one" (a boundary
+    // against nothing — it opens the cell), then a sibling div for "line
+    // two" (one real boundary against the first). querySelectorAll('td div')
+    // returns all three divs; unwrapping must still produce exactly one <br>.
+    const md = htmlToMarkdown(
+      '<table><thead><tr><th>X</th></tr></thead><tbody>' +
+      '<tr><td><div><div>line one</div></div><div>line two</div></td></tr>' +
+      '</tbody></table>'
+    ).trim();
+
+    expect(md).toContain('| line one<br>line two |');
+    expect(md.match(/<br>/g)).toHaveLength(1);
+  });
+
+  it('carries the <br> into the Simple HTML table too', () => {
+    const html = htmlToSimpleHtml(
+      '<table><thead><tr><th>X</th></tr></thead><tbody>' +
+      '<tr><td><div>line one</div><div>line two</div></td></tr>' +
+      '</tbody></table>'
+    );
+
+    expect(html).toContain('<td>line one<br>line two</td>');
   });
 });

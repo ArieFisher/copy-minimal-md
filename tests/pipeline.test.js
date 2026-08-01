@@ -25,10 +25,12 @@ describe('Pipeline.htmlToMarkdown', () => {
     expect(md).toBe('hello world');
   });
 
-  it('strips Google Sheets div-in-cell newlines', () => {
+  it('degrades Google Sheets div-in-cell newlines to <br>, keeping the row on one line', () => {
     const md = htmlToMarkdown('<table><thead><tr><th>X</th></tr></thead><tbody><tr><td><div>line1</div><div>line2</div></td></tr></tbody></table>').trim();
-    // Block divs would otherwise produce extra newlines; spans keep it inline.
-    expect(md).toContain('| line1line2 |');
+    // Block divs would otherwise split the row across lines and break the
+    // table syntax; the break survives as a <br>, GFM's spelling for one
+    // inside a cell, instead of being dropped.
+    expect(md).toContain('| line1<br>line2 |');
   });
 
   it('skips native-table replacement when clipboard cols > 2× DOM cols (layout-table guard)', () => {

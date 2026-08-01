@@ -69,15 +69,46 @@
     /* ------------------------------------------------------ source repairs */
 
     /**
+     * Whether a cell div being unwrapped needs a <br> in front of it: true
+     * when the nearest preceding sibling that isn't whitespace-only text is
+     * an element other than <br> (an unwrapped div's span, or ordinary
+     * inline content), false when there is none (the div opens the cell) or
+     * the source already put a <br> right there.
+     */
+    function hasContentBeforeCellDiv(div) {
+        let sib = div.previousSibling;
+        while (sib) {
+            if (sib.nodeType === 3) { // Node.TEXT_NODE
+                if (sib.textContent.trim() !== '') return true;
+                sib = sib.previousSibling;
+                continue;
+            }
+            if (sib.nodeType === 1) { // Node.ELEMENT_NODE
+                return sib.tagName !== 'BR';
+            }
+            sib = sib.previousSibling;
+        }
+        return false;
+    }
+
+    /**
      * div is in ALLOWED_TAGS, so block boundaries survive sanitize — which
      * means a <div> left inside a cell would survive too, and split a table
      * row across lines and break the Markdown table syntax. Inlining cell
      * divs into <span>s here, before sanitize runs, is what keeps that block
-     * break out of the table: sanitize never gets a div to preserve there.
+     * break out of the table — but the break itself isn't discarded, it
+     * degrades to a <br>, the one line-break spelling a Markdown table cell
+     * can carry (turndown-plugin-gfm passes a <br> inside a cell through
+     * untouched). A <br> goes in only between two divs that each contribute
+     * content — never at the start or end of a cell, and never doubled next
+     * to a <br> the source already had.
      */
     function inlineCellDivs(doc) {
         const divs = Array.from(doc.querySelectorAll('td div, th div'));
         divs.forEach(div => {
+            if (hasContentBeforeCellDiv(div)) {
+                div.before(doc.createElement('br'));
+            }
             const span = doc.createElement('span');
             span.append(...div.childNodes);
             div.replaceWith(span);
