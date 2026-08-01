@@ -56,3 +56,42 @@ describe('div-based prose keeps its block breaks', () => {
     expect(headlineLine).not.toBe(timeLine);
   });
 });
+
+// Once `div` is allowlisted (this fix), sanitize stops erasing block
+// boundaries anywhere — including inside table cells, where a broken-up row
+// would wreck the Markdown table's syntax. The td-div → span repair
+// (pipeline.js, inlineCellDivs in equivalents.js) runs before sanitize for
+// exactly this reason: it inlines cell divs first, so sanitize never sees a
+// block element to preserve there. This fixture carries both halves of that
+// invariant in one document, so nobody can fix the table half by disabling
+// the repair without this test noticing the prose half regress, or vice
+// versa.
+const mixedHtml = `
+  <table>
+    <thead><tr><th>Name</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><div>Alice</div></td><td><div>Engineer</div></td></tr>
+      <tr><td><div>Bob</div></td><td><div>Manager</div></td></tr>
+    </tbody>
+  </table>
+  <div>Some prose paragraph one.</div>
+  <div>Some prose paragraph two.</div>
+`;
+
+describe('table cells stay on one line while prose divs still break', () => {
+  // The cell half already passes today (inlineCellDivs runs regardless of
+  // the allowlist); the prose half fails until div is allowlisted. Flips to
+  // a normal `it` in the same change as the div-line-breaks tests above.
+  it.fails('keeps each table row on one line and still breaks the prose divs apart', () => {
+    const md = htmlToMarkdown(mixedHtml);
+
+    expect(md).toContain('| Alice | Engineer |');
+    expect(md).toContain('| Bob | Manager |');
+
+    const firstLine = lineContaining(md, 'Some prose paragraph one.');
+    const secondLine = lineContaining(md, 'Some prose paragraph two.');
+    expect(firstLine).toBeDefined();
+    expect(secondLine).toBeDefined();
+    expect(firstLine).not.toBe(secondLine);
+  });
+});
