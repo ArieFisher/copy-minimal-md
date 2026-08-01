@@ -29,7 +29,7 @@
 (function (global) {
     if (global.Pipeline) return;
 
-    const ALLOWED_TAGS = ['h1','h2','h3','h4','h5','h6','p','ul','ol','li','b','i','strong','em','u','a','img','table','thead','tbody','tr','th','td','br','hr','blockquote','code','pre'];
+    const ALLOWED_TAGS = ['h1','h2','h3','h4','h5','h6','p','ul','ol','li','b','i','strong','em','u','a','img','table','thead','tbody','tr','th','td','br','hr','blockquote','code','pre','div','section','article','figure','figcaption','header','footer','main','aside'];
     const ALLOWED_ATTR = ['href','src','alt','title'];
     const GRID_ALLOWED_TAGS = ['table','thead','tbody','tr','th','td'];
 

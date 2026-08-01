@@ -159,9 +159,10 @@ describe('Equivalents.fromHtml — ARIA grids', () => {
       '<table><tbody><tr><td>real</td></tr></tbody></table>' +
       '<div role="row"><span role="cell">loose</span></div>'
     );
-    // The stray row is not reconstructed; the sanitizer drops its wrappers and
-    // keeps the text, same as any other unstructured content.
-    expect(squash(simpleHtml)).toBe('<table><tr><td>real</td></tr></table>loose');
+    // The stray row is not reconstructed into a table. Its <div> now
+    // survives sanitize like any other block container, so the text keeps
+    // that wrapper instead of landing bare.
+    expect(squash(simpleHtml)).toBe('<table><tr><td>real</td></tr></table><div>loose</div>');
   });
 });
 

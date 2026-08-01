@@ -23,11 +23,7 @@ function lineContaining(markdown, needle) {
 }
 
 describe('div-based prose keeps its block breaks', () => {
-  // ALLOWED_TAGS omits `div`, so this pair currently fails: DOMPurify unwraps
-  // every div in the fixture and the four blocks below collapse onto one
-  // line. Flips to a normal `it` once div (and its block-container kin) are
-  // allowlisted in pipeline.js and equivalents.js.
-  it.fails('does not run the source, headline, timestamp and byline onto one line', () => {
+  it('does not run the source, headline, timestamp and byline onto one line', () => {
     const md = htmlToMarkdown(html);
 
     const reutersLine = lineContaining(md, 'Reuters');
@@ -47,7 +43,7 @@ describe('div-based prose keeps its block breaks', () => {
     expect(timeLine).not.toBe(bylineLine);
   });
 
-  it.fails('breaks the headline link from the timestamp that follows it', () => {
+  it('breaks the headline link from the timestamp that follows it', () => {
     const md = htmlToMarkdown(html);
 
     const headlineLine = lineContaining(md, 'Japan may have sold up to $59 billion');
@@ -79,10 +75,7 @@ const mixedHtml = `
 `;
 
 describe('table cells stay on one line while prose divs still break', () => {
-  // The cell half already passes today (inlineCellDivs runs regardless of
-  // the allowlist); the prose half fails until div is allowlisted. Flips to
-  // a normal `it` in the same change as the div-line-breaks tests above.
-  it.fails('keeps each table row on one line and still breaks the prose divs apart', () => {
+  it('keeps each table row on one line and still breaks the prose divs apart', () => {
     const md = htmlToMarkdown(mixedHtml);
 
     expect(md).toContain('| Alice | Engineer |');
