@@ -1,6 +1,7 @@
 # Plan: restore line breaks lost from div-based pages
 
-Status: agreed in discussion, not yet implemented. Do the steps in this order.
+Status: implemented on `bugfix/div-line-breaks` (steps 1–5 plus step 6,
+adopted after the fact). This file remains the record of the agreed order.
 
 ## Problem
 
@@ -48,3 +49,14 @@ in the sanitize step.
    output bothers in practice; if implemented, it belongs as a post-pass on
    the sanitized tree, alongside `simplifyTables` — see the pre/post
    comparison in the discussion.
+
+6. **Intra-cell breaks degrade to `<br>`.** Inside a Markdown table cell a
+   real line break is impossible by the format's definition (a row is one
+   physical line), so this is the one place the issue's fallback clause
+   applies — and GFM's legal spelling for it is a literal `<br>`, which the
+   vendored turndown-plugin-gfm passes through cells untouched. The td-div
+   repair therefore inserts `<br>` between consecutive block siblings when
+   unwrapping cell divs — only between: a cell wrapped in a single div (the
+   common Sheets case) is unchanged, and no leading or trailing `<br>` is
+   ever added. See `docs/pipeline-placement.md` for why this is a tier-1
+   repair change (both outputs must carry the same cell content).
