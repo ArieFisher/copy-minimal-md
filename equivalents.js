@@ -49,19 +49,19 @@
      * the hotkey writes are then the same derivation, and cannot drift apart.
      */
     function toSimpleHtml(htmlText) {
-        return simplifyTables(sanitize(repair(htmlText).repaired));
+        return simplifyTables(collapseContainers(sanitize(repair(htmlText).repaired)));
     }
 
     function fromHtml(htmlText) {
         const { repaired, sourceType } = repair(htmlText);
 
-        const simpleHtml = simplifyTables(sanitize(repaired));
+        const simpleHtml = simplifyTables(collapseContainers(sanitize(repaired)));
 
         // The promotion happens on a throwaway parse so it reaches the Markdown
         // and nothing else.
         const mdDoc = new DOMParser().parseFromString(repaired, 'text/html');
         const promoted = promoteImplicitHeaders(mdDoc);
-        const markdown = toMarkdown(sanitize(promoted ? mdDoc.body.innerHTML : repaired));
+        const markdown = toMarkdown(collapseContainers(sanitize(promoted ? mdDoc.body.innerHTML : repaired)));
 
         return { markdown, simpleHtml, derivedFrom: 'text/html', sourceType };
     }
@@ -219,6 +219,115 @@
         return modified;
     }
 
+    /* -------------------------------------------------- container collapsing */
+
+    /** Containers that say nothing on their own — safe to unwrap or drop. */
+    const PLAIN_CONTAINERS = new Set(['DIV', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'MAIN', 'ASIDE']);
+
+    /** The one whose nesting is never meaningful, so it is the one unwrapped. */
+    const UNWRAPPABLE = 'DIV';
+
+    /**
+     * Take out the wrappers sanitize left behind.
+     *
+     * These are not in the copy. A Google News headline card nests five divs
+     * around a <button> menu; sanitize drops the button, and only then is that
+     * a chain of divs around nothing. So this runs on sanitized markup —
+     * earlier there is nothing yet to collapse, and the same divs still look
+     * occupied.
+     *
+     * Two rules, repeated until neither fires:
+     *
+     *   - a container with no text and no elements inside it goes. The test is
+     *     "holds no element", not "holds no text", so a container is never
+     *     removed over content that has no text of its own — <figure><img></figure>
+     *     and a div holding only a <br> both stay.
+     *   - a div whose only child is another container is one wrapper too many,
+     *     so it is unwrapped. The child is what is kept, which is why a <figure>
+     *     or a <section> inside a div survives the div going.
+     *
+     * Only the plain containers take part. <figure> and <figcaption> say
+     * something about what they hold, so they are never unwrapped.
+     */
+    /**
+     * Elements a renderer treats as a block. Whitespace that touches one of
+     * these is eaten by the block boundary, so removing it changes nothing on
+     * screen — which is what makes the whitespace sweep below safe.
+     */
+    const BLOCK_TAGS = new Set([
+        'DIV', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'MAIN', 'ASIDE', 'FIGURE', 'FIGCAPTION',
+        'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'PRE', 'HR',
+        'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD'
+    ]);
+
+    /**
+     * Whitespace left where a wrapper used to be. A removed div takes its tags
+     * but not the newline and indent that sat around them, and those add up in
+     * a byte count this tool puts on screen.
+     *
+     * Only whitespace touching a block element goes: that whitespace is not
+     * rendered either way. Whitespace between two inline elements is the space
+     * between two words, and it stays.
+     */
+    function dropDeadWhitespace(doc) {
+        // Removing a wrapper leaves the whitespace that was on either side of
+        // it as two adjacent text nodes. Merging them first is what lets the
+        // test below see a real element on each side instead of more text.
+        doc.body.normalize();
+
+        const walker = doc.createTreeWalker(doc.body, 4 /* SHOW_TEXT */);
+        const dead = [];
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (node.textContent.trim() !== '') continue;
+            const before = node.previousSibling;
+            const after = node.nextSibling;
+            const parent = node.parentElement;
+            // Against a block element on either side, or against the open or
+            // close tag of the block it sits in. All three are boundaries the
+            // renderer eats whitespace at.
+            const touchesBlock =
+                (before ? before.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.has(before.tagName)
+                        : !!parent && BLOCK_TAGS.has(parent.tagName))
+                || (after ? after.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.has(after.tagName)
+                          : !!parent && BLOCK_TAGS.has(parent.tagName));
+            if (touchesBlock) dead.push(node);
+        }
+        dead.forEach(node => node.remove());
+    }
+
+    function collapseContainers(html) {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const selector = 'div, section, article, header, footer, main, aside';
+
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const el of Array.from(doc.querySelectorAll(selector))) {
+                // A previous pass in this same sweep may have taken it already.
+                if (!el.isConnected) continue;
+
+                if (el.children.length === 0 && el.textContent.trim() === '') {
+                    el.remove();
+                    changed = true;
+                    continue;
+                }
+
+                if (el.tagName !== UNWRAPPABLE) continue;
+                const kids = Array.from(el.childNodes).filter(
+                    node => node.nodeType !== Node.TEXT_NODE || node.textContent.trim() !== ''
+                );
+                if (kids.length === 1 && kids[0].nodeType === Node.ELEMENT_NODE
+                    && (PLAIN_CONTAINERS.has(kids[0].tagName) || kids[0].tagName === 'FIGURE')) {
+                    el.replaceWith(...el.childNodes);
+                    changed = true;
+                }
+            }
+        }
+
+        dropDeadWhitespace(doc);
+        return doc.body.innerHTML;
+    }
+
     /**
      * Simple HTML only. Two tidies, both confined to table structure:
      *
@@ -323,7 +432,9 @@
         );
     }
 
-    global.Equivalents = { fromHtml, toSimpleHtml, isSameHtmlEntry };
+    // collapseContainers is exported for pipeline.js, whose Markdown path does
+    // its own sanitize and would otherwise need a second copy of this.
+    global.Equivalents = { fromHtml, toSimpleHtml, isSameHtmlEntry, collapseContainers };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) {
