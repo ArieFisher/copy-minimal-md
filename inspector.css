@@ -406,18 +406,25 @@ body {
   margin: 0 0 8px;
 }
 
-/* The derived cards now carry the payload's own width/height, so an image the
-   copy sized arrives here at the size it was drawn at. The cap is for the ones
-   it could not: a size given as a percentage, or given only by a stylesheet
-   rule that never made it onto the clipboard. Those still arrive at full
-   natural size with nothing holding them back. `contain` keeps an image the cap
-   does clamp letterboxed rather than stretched, in this card and the payload's
-   own alike. */
+/* The Simple HTML card now carries the payload's own width/height, so an image
+   the copy sized arrives at the size it was drawn at.
+
+   Do not add `width: auto` / `height: auto` back. They read as harmless
+   restatements of the initial value and are not: a width/height attribute
+   enters the cascade as a presentational hint, which any author rule outranks.
+   With those two declarations here, every image in these cards drew at its
+   file's natural size however the copy had sized it. Measured in Chromium: a
+   favicon carrying height="14" rendered 96×96 with them, 14×14 without.
+
+   The cap is for the images that arrive with no size on them, and there are
+   always some. A size written as a percentage has no attribute form; a size
+   living in the site's stylesheet never reached the clipboard; and Markdown has
+   no way to write a size at all, so that card's images are unsized by
+   construction. `contain` keeps whatever the cap does clamp letterboxed rather
+   than stretched — here and in the clipboard's own card alike. */
 .card-render img {
   max-width: 100%;
   max-height: 120px;
-  width: auto;
-  height: auto;
   object-fit: contain;
   border-radius: 6px;
 }

@@ -320,3 +320,37 @@ test('every pane fills the card it sits in, in both views', async ({ context, se
     expect.soft(gap, `${card}, source view`).toBeLessThanOrEqual(2);
   }
 });
+
+/** A 96×96 square, standing in for a favicon: the natural size a news site
+ *  serves one at, and four times the size the page actually draws it. */
+const SQUARE_96 = 'data:image/svg+xml;base64,' + Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="orange"/></svg>'
+).toString('base64');
+
+test('the Simple HTML card draws an image at the size the copy asked for', async ({ context, server, extensionId }) => {
+  // Unit tests can see that width/height reach the Simple HTML; they cannot see
+  // this stylesheet take them away again. That is what happened — `width: auto`
+  // on .card-render img outranked the attributes, because an attribute enters
+  // the cascade as a presentational hint and loses to any author rule. Every
+  // image drew at 96px regardless. This is the pane that catches it.
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    plain: 'Publisher headline',
+    html: `<div><img src="${SQUARE_96}" style="height: 14px;" alt="">`
+        + `<figure><img src="${SQUARE_96}" style="width: 64px; height: 64px;" alt=""></figure>`
+        + '<p>Publisher headline</p></div>',
+  });
+
+  const box = (sel) => page.locator(sel).evaluate((n) => {
+    const r = n.getBoundingClientRect();
+    return `${Math.round(r.width)}x${Math.round(r.height)}`;
+  });
+
+  // 14px on one axis alone: the other comes from the file's own proportions.
+  await expect.poll(() => box('.card--simple-html .card-render img >> nth=0')).toBe('14x14');
+  await expect.poll(() => box('.card--simple-html .card-render img >> nth=1')).toBe('64x64');
+
+  // Markdown has no syntax for a size, so its images are unsized by
+  // construction and the cap is all that holds them. Asserted so the two cards
+  // differing here reads as intended rather than as this bug coming back.
+  await expect.poll(() => box('.card--markdown .card-render img >> nth=0')).toBe('96x96');
+});
