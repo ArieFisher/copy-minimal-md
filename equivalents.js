@@ -38,6 +38,7 @@
 
         if (inlineCellDivs(doc)) modified = true;
         if (unwrapGoogleDocsBold(doc)) modified = true;
+        if (dropInvisibleImages(doc)) modified = true;
         if (transcribeImageSize(doc)) modified = true;
         if (reconstructAriaTables(doc)) {
             modified = true;
@@ -126,6 +127,65 @@
      * `12em` and `calc(...)` all fail to match — see transcribeImageSize.
      */
     const PIXEL_LENGTH = /^(\d+(?:\.\d+)?)px$/i;
+
+    /**
+     * A length that renders as nothing. The `px` is optional because the same
+     * test reads both spellings of a size: the style says `1px`, the attribute
+     * says `1`.
+     */
+    function isVanishing(declared) {
+        const match = /^(\d+(?:\.\d+)?)(?:px)?$/i.exec(String(declared).trim());
+        return !!match && parseFloat(match[1]) <= 1;
+    }
+
+    /**
+     * Take out the images that were never meant to be seen.
+     *
+     * A picture declared at a pixel or less, or hidden outright, is not a
+     * picture: it is a tracking beacon or a spacer holding a gap open. Nothing
+     * that is content is ever sized 1×1, which is what makes this a category
+     * rather than a threshold — there is no number to tune, and deliberately no
+     * floor in the range where real images live. The publisher favicon in the
+     * Google News fixture is 14px, and favicons are commonly 16; a floor
+     * anywhere up there would be eating content.
+     *
+     * The reason to remove them rather than leave them small is not how they
+     * look — since transcribeImageSize, a beacon arrives at the 1px it asked for
+     * and is invisible either way. It is that the `src` survives into the
+     * clipboard, and this output gets pasted and sent on. The beacon then fires
+     * from the recipient's renderer, reporting a read to whoever wrote the
+     * source page — someone who never visited it. inline-style.js refuses
+     * fetching declarations for the same reason, one step earlier and on the
+     * reader's own behalf; this is the same rule pointed at whoever the copy is
+     * pasted to.
+     *
+     * Partial by construction: a beacon sized by a stylesheet rule, or given no
+     * size at all, declares nothing here and stays. This is the cheap half, not
+     * tracker protection.
+     */
+    function dropInvisibleImages(doc) {
+        const doomed = Array.from(doc.querySelectorAll('img')).filter(img => {
+            if (img.style.getPropertyValue('display').trim().toLowerCase() === 'none') return true;
+            if (img.style.getPropertyValue('visibility').trim().toLowerCase() === 'hidden') return true;
+            return ['width', 'height'].some(axis =>
+                isVanishing(img.style.getPropertyValue(axis)) || isVanishing(img.getAttribute(axis) || '')
+            );
+        });
+
+        // A beacon is sometimes the whole of a link. Removing it on its own
+        // leaves an <a> wrapped around nothing, which Turndown writes out as
+        // `[](href)` — a link with no text, naming a destination the reader is
+        // given no way to see. Only anchors this pass emptied are taken; one
+        // that arrived empty is not this pass's business.
+        const hosts = doomed.map(img => img.closest('a'));
+        doomed.forEach(img => img.remove());
+        hosts.forEach(anchor => {
+            if (!anchor || !anchor.isConnected) return;
+            if (anchor.children.length === 0 && anchor.textContent.trim() === '') anchor.remove();
+        });
+
+        return doomed.length > 0;
+    }
 
     /**
      * Carry an image's drawn size across the sanitize step.

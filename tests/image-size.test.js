@@ -114,6 +114,75 @@ describe('the size only a stylesheet knew', () => {
   });
 });
 
+describe('images that were never meant to be seen', () => {
+  const gone = (html) => {
+    const { simpleHtml, markdown } = fromHtml(html);
+    expect(simpleHtml).not.toContain('<img');
+    expect(simpleHtml).not.toContain('track.test');
+    expect(markdown).not.toContain('track.test');
+  };
+
+  it('drops a 1×1 declared on attributes', () => {
+    gone('<p>Story<img src="https://track.test/p.gif" width="1" height="1"></p>');
+  });
+
+  it('drops a 1×1 declared in the style', () => {
+    gone('<p>Story<img src="https://track.test/p.gif" style="width: 1px; height: 1px;"></p>');
+  });
+
+  it('drops one that vanishes on a single axis', () => {
+    // A 1×100 spacer holds a gap open. It is still not a picture.
+    gone('<p>Story<img src="https://track.test/p.gif" width="1" height="100"></p>');
+  });
+
+  it('drops a zero', () => {
+    gone('<p>Story<img src="https://track.test/p.gif" style="width: 0; height: 0;"></p>');
+  });
+
+  it('drops one hidden outright', () => {
+    gone('<p>Story<img src="https://track.test/p.gif" style="display: none;"></p>');
+    gone('<p>Story<img src="https://track.test/p.gif" style="visibility: hidden;"></p>');
+  });
+
+  it('keeps the text either side of it', () => {
+    const { markdown } = fromHtml('<p>Before<img src="https://track.test/p.gif" width="1" height="1">After</p>');
+    expect(markdown).toBe('BeforeAfter');
+  });
+
+  it('leaves a 2px image alone, and every real image above it', () => {
+    // No floor in the range where content lives. 14px is the publisher favicon
+    // in the Google News fixture; 16px is the common favicon size. The category
+    // stops at one pixel and does not creep upward.
+    for (const size of [2, 14, 16, 64]) {
+      const { simpleHtml } = fromHtml(`<p><img src="https://x.test/f.png" alt="" width="${size}" height="${size}"></p>`);
+      expect(imgTag(simpleHtml)).toContain(`width="${size}"`);
+    }
+  });
+
+  it('takes the link a dropped beacon was the whole of', () => {
+    // Otherwise the <a> survives around nothing and Turndown writes `[](href)`:
+    // a link with no text, naming a destination the reader cannot see.
+    const { markdown, simpleHtml } = fromHtml(
+      '<p><a href="https://news.test/s"><img src="https://track.test/p.gif" width="1" height="1"></a></p>'
+    );
+    expect(markdown).toBe('');
+    expect(simpleHtml).not.toContain('<a');
+  });
+
+  it('leaves a link that still has something to show', () => {
+    const { markdown } = fromHtml(
+      '<p><a href="https://news.test/s">Headline<img src="https://track.test/p.gif" width="1" height="1"></a></p>'
+    );
+    expect(markdown).toBe('[Headline](https://news.test/s)');
+  });
+
+  it('does not read a size it was not given as a vanishing one', () => {
+    // No declared size at all is unknown, not zero.
+    const { simpleHtml } = fromHtml('<p><img src="https://x.test/f.png" alt=""></p>');
+    expect(simpleHtml).toContain('<img');
+  });
+});
+
 describe('the hotkey path derives the same thing', () => {
   it('sizes an image written straight to the clipboard', () => {
     // toSimpleHtml is what cmd+shift+U writes to text/html. It shares the repair
