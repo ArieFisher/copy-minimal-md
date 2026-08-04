@@ -24,7 +24,11 @@
     if (global.Equivalents) return;
 
     const ALLOWED_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'u', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'br', 'hr', 'blockquote', 'code', 'pre', 'div', 'section', 'article', 'figure', 'figcaption', 'header', 'footer', 'main', 'aside'];
-    const ALLOWED_ATTR = ['href', 'src', 'alt', 'title'];
+    // `width` and `height` describe how big a picture is drawn, which is content,
+    // not decoration: an image at the wrong size is a layout defect in whatever
+    // the copy is pasted into. Both are inert — a number each, no URL to fetch and
+    // nothing to position with — so they cost this list nothing.
+    const ALLOWED_ATTR = ['href', 'src', 'alt', 'title', 'width', 'height'];
 
     /** The source repairs, applied once for whatever is derived from them. */
     function repair(htmlText) {
@@ -34,6 +38,7 @@
 
         if (inlineCellDivs(doc)) modified = true;
         if (unwrapGoogleDocsBold(doc)) modified = true;
+        if (transcribeImageSize(doc)) modified = true;
         if (reconstructAriaTables(doc)) {
             modified = true;
             sourceType = 'HTML (Extracted ARIA Table)';
@@ -114,6 +119,53 @@
             div.replaceWith(span);
         });
         return divs.length > 0;
+    }
+
+    /**
+     * A pixel length and nothing else. Anchored at both ends, so `50%`, `auto`,
+     * `12em` and `calc(...)` all fail to match — see transcribeImageSize.
+     */
+    const PIXEL_LENGTH = /^(\d+(?:\.\d+)?)px$/i;
+
+    /**
+     * Carry an image's drawn size across the sanitize step.
+     *
+     * A copy states that size in two places, and sanitize was removing both. The
+     * `width`/`height` attributes now survive on their own, since the allowlist
+     * admits them. The same two properties written as inline style do not, and
+     * must not: allowlisting `style` would let the payload's whole declaration
+     * list into the output, background fetches and all, which is the thing
+     * inline-style.js exists to refuse. So the two declarations that describe
+     * size are copied out into attributes here, before sanitize drops the style
+     * attribute with everything else still in it.
+     *
+     * Where both are present the style wins, because that is the order the
+     * browser resolved them in on the page the copy was taken from.
+     *
+     * Only pixel lengths come across. These attributes are counted in pixels and
+     * in nothing else — HTML has no percentage form for them — so `width: 50%`
+     * is left behind rather than rewritten as `width="50"`, which would be a
+     * different size that happens to share a number. An image sized that way
+     * still arrives here unsized; it is the case the render cap in inspector.css
+     * is still there for.
+     *
+     * A declaration on one axis alone is copied on its own. The browser derives
+     * the other from the file's natural proportions, which is the same shape the
+     * source asked for — supplying a second number would be this pass inventing
+     * one.
+     */
+    function transcribeImageSize(doc) {
+        let modified = false;
+        doc.querySelectorAll('img[style]').forEach(img => {
+            ['width', 'height'].forEach(axis => {
+                const declared = img.style.getPropertyValue(axis).trim();
+                const match = PIXEL_LENGTH.exec(declared);
+                if (!match) return;
+                img.setAttribute(axis, String(Math.round(parseFloat(match[1]))));
+                modified = true;
+            });
+        });
+        return modified;
     }
 
     /** Google Docs wraps the whole copy in <b style="font-weight:normal">. */

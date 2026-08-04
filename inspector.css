@@ -406,11 +406,13 @@ body {
   margin: 0 0 8px;
 }
 
-/* The derived cards drop width/height along with everything else the payload
-   used to size a picture, so a large image arrives here at its full natural
-   size with nothing holding it back. The cap is what holds it back. `contain`
-   is the safety net for the other card: the clipboard's own HTML keeps its
-   sizing, and an image the cap clamps there must letterbox, not stretch. */
+/* The derived cards now carry the payload's own width/height, so an image the
+   copy sized arrives here at the size it was drawn at. The cap is for the ones
+   it could not: a size given as a percentage, or given only by a stylesheet
+   rule that never made it onto the clipboard. Those still arrive at full
+   natural size with nothing holding them back. `contain` keeps an image the cap
+   does clamp letterboxed rather than stretched, in this card and the payload's
+   own alike. */
 .card-render img {
   max-width: 100%;
   max-height: 120px;
