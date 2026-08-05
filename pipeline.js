@@ -30,7 +30,11 @@
     if (global.Pipeline) return;
 
     const ALLOWED_TAGS = ['h1','h2','h3','h4','h5','h6','p','ul','ol','li','b','i','strong','em','u','a','img','table','thead','tbody','tr','th','td','br','hr','blockquote','code','pre','div','section','article','figure','figcaption','header','footer','main','aside'];
-    const ALLOWED_ATTR = ['href','src','alt','title'];
+    // Kept identical to the list in equivalents.js. Only Markdown is derived here
+    // — Turndown reads none of these but href, src and alt — so the two size
+    // attributes ride along unused, rather than leaving two allowlists that
+    // differ for no reason a later reader could find.
+    const ALLOWED_ATTR = ['href','src','alt','title','width','height'];
     const GRID_ALLOWED_TAGS = ['table','thead','tbody','tr','th','td'];
 
     /**
@@ -164,9 +168,9 @@
             htmlText = doc.body.innerHTML;
         }
 
-        const cleanHtml = DOMPurify.sanitize(htmlText, {
+        const cleanHtml = Equivalents.collapseContainers(Equivalents.nameEmptyLinksAndImages(DOMPurify.sanitize(htmlText, {
             ALLOWED_TAGS, ALLOWED_ATTR, ALLOW_DATA_ATTR: false
-        });
+        })));
 
         const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
         td.use(turndownPluginGfm.gfm);

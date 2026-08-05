@@ -64,6 +64,8 @@ module.exports = {
     get gridToMarkdown() { return getPipeline().gridToMarkdown; },
     get gridToSimpleHtml() { return getPipeline().gridToSimpleHtml; },
     get fromHtml() { return getEquivalents().fromHtml; },
+    get collapseContainers() { return getEquivalents().collapseContainers; },
+    get nameEmptyLinksAndImages() { return getEquivalents().nameEmptyLinksAndImages; },
     get toSimpleHtml() { return getEquivalents().toSimpleHtml; },
     get isSameHtmlEntry() { return getEquivalents().isSameHtmlEntry; },
 };

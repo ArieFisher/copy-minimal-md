@@ -22,7 +22,7 @@
         "service_worker": "background.js"
     },
     "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self'; connect-src 'self'"
+        "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' data: blob:; font-src 'self'; connect-src 'self'"
     },
     "commands": {
         "run-markdown-clean": {
