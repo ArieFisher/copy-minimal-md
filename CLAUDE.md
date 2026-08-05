@@ -39,6 +39,17 @@ may lose the reader at the top. Instead:
 This applies to all communications with the owner, including explanations, routine status
 updates, and summaries of completed work.
 
+## When a change does not show up
+
+The owner runs this from Chrome, on an unpacked extension loaded from disk.
+Code on a branch is not code Chrome is running. So when work is reported as
+having had no effect, this goes first, ahead of any other diagnosis:
+
+> The extension still has the old code. The branch isn't loaded in Chrome
+> until you reload the unpacked extension.
+
+Then carry on to the payload, the pipeline, and the rest.
+
 ## Branches and commit authorship
 
 Branch names take a standard prefix — `feature/`, `bugfix/`, `hotfix/`,
