@@ -51,7 +51,7 @@ This second way helps avoid a tedious dance that you may have experience with:
 Instead:
 
  * copy-minimal-md ....
- * 'Paste from Markdown' into a Google Doc (or regular paste into many other tools)
+ * paste into a Google Doc — an ordinary `Cmd+V` now lands the structure, and 'Paste from Markdown' still works too (see [Usage](#usage))
 
 
 ## Why this tool
@@ -99,7 +99,19 @@ By contrast, if you copy with this library, it takes the **selected values** in 
 2.  Press the keyboard shortcut:
     *   **Mac**: `Cmd + Shift + U`
     *   **Windows/Linux**: `Ctrl + Shift + U`
-3.  **Paste** (`Cmd+V` / `Ctrl+V`) — a plain-text editor gets clean Markdown; a rich-text editor gets the copy's structure, formatted, with the source page's styling gone
+3.  **Paste**. Both equivalents are on the clipboard, so the paste command you pick decides which one you get.
+
+In Google Docs, all three do something useful:
+
+| Paste command | Shortcut | What lands | Reads |
+| --- | --- | --- | --- |
+| Edit → **Paste** | `Cmd+V` / `Ctrl+V` | The content in a clean structure — headers, tables, links — stripped of unnecessary formatting | `text/html` |
+| Edit → **Paste without formatting** | `Cmd+Shift+V` / `Ctrl+Shift+V` | The raw Markdown code | `text/plain` |
+| Edit → **Paste from Markdown** | menu only | The content in a clean structure — headers, tables, links — stripped of unnecessary formatting | `text/plain` |
+
+The first and third land the same thing by different routes, so it no longer matters which you reach for. Use the second when you want the Markdown source itself.
+
+Everywhere else the same two entries are on offer: a plain-text destination (an LLM prompt box, a code editor, a terminal) takes the Markdown, and a rich-text one (Gmail, Notion, Confluence) takes the structure.
 
 ## How It Works
 
