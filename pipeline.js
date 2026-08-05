@@ -142,6 +142,17 @@
             modified = true;
         });
 
+        // Take the tracking beacons out before the naming pass below can put a
+        // name on one. This is the same removal `repair` runs in equivalents.js,
+        // and this path needs its own call because it sanitizes directly instead
+        // of going through `repair` — without it the two clipboard entries one
+        // cmd+shift+U writes disagree, text/html having dropped the beacon and
+        // text/plain having kept it and called it `image…`.
+        //
+        // Reads the inline style, which sanitize is about to drop, so it has to
+        // stay above that call — the same reason it sits early in `repair`.
+        if (Equivalents.dropInvisibleImages(doc)) modified = true;
+
         // Implicit-header promotion: if a table has no <thead> and its first row isn't all <th>,
         // promote that row to <thead> so Turndown GFM emits a proper Markdown header.
         currentTables.forEach(table => {
