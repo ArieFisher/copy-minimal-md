@@ -49,19 +49,19 @@
      * the hotkey writes are then the same derivation, and cannot drift apart.
      */
     function toSimpleHtml(htmlText) {
-        return simplifyTables(collapseContainers(sanitize(repair(htmlText).repaired)));
+        return simplifyTables(collapseContainers(nameEmptyLinks(sanitize(repair(htmlText).repaired))));
     }
 
     function fromHtml(htmlText) {
         const { repaired, sourceType } = repair(htmlText);
 
-        const simpleHtml = simplifyTables(collapseContainers(sanitize(repaired)));
+        const simpleHtml = simplifyTables(collapseContainers(nameEmptyLinks(sanitize(repaired))));
 
         // The promotion happens on a throwaway parse so it reaches the Markdown
         // and nothing else.
         const mdDoc = new DOMParser().parseFromString(repaired, 'text/html');
         const promoted = promoteImplicitHeaders(mdDoc);
-        const markdown = toMarkdown(collapseContainers(sanitize(promoted ? mdDoc.body.innerHTML : repaired)));
+        const markdown = toMarkdown(collapseContainers(nameEmptyLinks(sanitize(promoted ? mdDoc.body.innerHTML : repaired))));
 
         return { markdown, simpleHtml, derivedFrom: 'text/html', sourceType };
     }
@@ -328,6 +328,57 @@
         return doc.body.innerHTML;
     }
 
+    /* ----------------------------------------------------------- empty links */
+
+    /** What an anchor the source never named is called. */
+    const UNNAMED_LINK = 'image…';
+
+    /** Where a name is looked for, best first. */
+    const NAME_ATTRIBUTES = ['alt', 'aria-label', 'title'];
+
+    /** How much of the name stands in for the link text. */
+    const NAME_PREVIEW_LENGTH = 4;
+
+    /**
+     * Put a name back on a link sanitize emptied.
+     *
+     * The "see more headlines" control on a Google News card is an <a> around an
+     * inline <svg> icon. <svg> is not on the allowlist, and unlike a disallowed
+     * HTML tag it is removed with its whole subtree rather than unwrapped — so
+     * the anchor comes out of sanitize holding nothing and reads as `[](url)`:
+     * invisible in the Markdown, invisible in the Simple HTML, and impossible to
+     * tell apart from a copy that quietly lost something.
+     *
+     * Such an anchor is named from what the source already said about it — its
+     * `alt`, else `aria-label`, else `title` — shown as the first few characters
+     * and an ellipsis, so the link is visible without a whole sentence standing
+     * in for an icon. The name in full goes to `title`, which a browser surfaces
+     * on hover and Turndown writes into the link. An anchor the source never
+     * named falls back to `image…`.
+     *
+     * Runs on sanitized markup: before it, the icon is still there and the
+     * anchor still looks occupied.
+     *
+     * An anchor holding an <img> is left alone — it has something to show, and
+     * the image carries its own alt.
+     */
+    function nameEmptyLinks(html) {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const unnamed = Array.from(doc.querySelectorAll('a')).filter(
+            a => a.textContent.trim() === '' && !a.querySelector('img')
+        );
+
+        unnamed.forEach(a => {
+            const name = NAME_ATTRIBUTES
+                .map(attribute => (a.getAttribute(attribute) || '').trim())
+                .find(Boolean);
+            a.textContent = name ? name.slice(0, NAME_PREVIEW_LENGTH).trimEnd() + '…' : UNNAMED_LINK;
+            if (name) a.setAttribute('title', name);
+        });
+
+        return unnamed.length > 0 ? doc.body.innerHTML : html;
+    }
+
     /**
      * Simple HTML only. Two tidies, both confined to table structure:
      *
@@ -432,9 +483,10 @@
         );
     }
 
-    // collapseContainers is exported for pipeline.js, whose Markdown path does
-    // its own sanitize and would otherwise need a second copy of this.
-    global.Equivalents = { fromHtml, toSimpleHtml, isSameHtmlEntry, collapseContainers };
+    // collapseContainers and nameEmptyLinks are exported for pipeline.js, whose
+    // Markdown path does its own sanitize and would otherwise need a second copy
+    // of both.
+    global.Equivalents = { fromHtml, toSimpleHtml, isSameHtmlEntry, collapseContainers, nameEmptyLinks };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) {
