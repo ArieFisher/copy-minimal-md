@@ -38,6 +38,12 @@ that are whitespace throughout — trimming inside a mixed node would put the
 pass in the business of editing content, next door to the intra-cell `<br>`
 rule it must not disturb. It renders as nothing.
 
+**Later change — image sizing.** `expected.simple.html` now carries `height="14"`
+on the publisher favicon and `width="64" height="64"` on the thumbnail. Both
+numbers are the source's own, taken out of the inline style before sanitize
+drops it. Note the favicon: 14px is below any round-number floor one might reach
+for to filter out tracking pixels, and it is a real content image.
+
 **Input.** Taken from the inspector's Source pane, so it arrives pretty-printed
 rather than as the single line the clipboard actually holds. That makes it the
 harder case: every wrapper removed leaves indentation behind, which is what
