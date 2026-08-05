@@ -618,10 +618,17 @@
         );
     }
 
-    // collapseContainers and nameEmptyLinksAndImages are exported for pipeline.js, whose
-    // Markdown path does its own sanitize and would otherwise need a second copy
-    // of both.
-    global.Equivalents = { fromHtml, toSimpleHtml, isSameHtmlEntry, collapseContainers, nameEmptyLinksAndImages };
+    // Exported for pipeline.js, whose Markdown path does its own sanitize and
+    // would otherwise need a second copy of these.
+    //
+    // dropInvisibleImages travels with nameEmptyLinksAndImages and is not
+    // optional. The naming pass puts a name on any image whose `alt` is empty,
+    // and a tracking beacon's `alt` is empty — nobody describes a pixel nobody
+    // was meant to see. A caller that takes the naming without the dropping
+    // therefore turns `![](beacon-url)` into `![image…](beacon-url)`: the same
+    // tracking src, now wearing a name that reads like a picture someone chose
+    // to send. Naming is only safe downstream of the removal.
+    global.Equivalents = { fromHtml, toSimpleHtml, isSameHtmlEntry, collapseContainers, nameEmptyLinksAndImages, dropInvisibleImages };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) {
