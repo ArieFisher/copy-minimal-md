@@ -110,22 +110,54 @@ test('writes both entries for a native table selection', async ({ context, serve
   expect(clip.html).not.toContain('style=');
 });
 
-test('leaves text/html alone for a copy with no table', async ({ context, server, serviceWorker }) => {
+test('writes both entries for a copy with no table', async ({ context, server, serviceWorker }) => {
   const clip = await runCleaner({ context, server, serviceWorker }, {
     path: '/prose.html',
     selectId: 'p',
     html: `
       <!doctype html><html><body>
-        <div id="p"><h1>Title</h1><p>Some <b>bold</b> prose.</p></div>
+        <div id="p" style="font-family: Comic Sans MS">
+          <h1>Title</h1>
+          <p class="vendor-tag">Some <b>bold</b> prose and a <a href="https://example.test/x">link</a>.</p>
+        </div>
       </body></html>
     `,
   });
 
   expect(clip.plain).toContain('# Title');
   expect(clip.plain).toContain('**bold**');
-  // No text/html — writing one would change what every ordinary paste produces,
-  // so the hotkey reserves it for tables. Asserted as an absence rather than an
-  // exact list of types: what a platform's clipboard carries alongside the entry
-  // we asked for is not this test's business.
-  expect(clip.types).not.toContain('text/html');
+
+  // Prose gets the same treatment a table does: the structure goes to text/html
+  // so a rich-text editor renders it, instead of pasting the Markdown syntax.
+  expect(clip.types).toContain('text/html');
+  expect(clip.html).toContain('<h1>Title</h1>');
+  expect(clip.html).toContain('<b>bold</b>');
+  expect(clip.html).toContain('href="https://example.test/x"');
+  // Still Simple HTML: the page's own formatting is what the hotkey is for.
+  expect(clip.html).not.toContain('style=');
+  expect(clip.html).not.toContain('class=');
+});
+
+test('the two entries describe the same copy', async ({ context, server, serviceWorker }) => {
+  const clip = await runCleaner({ context, server, serviceWorker }, {
+    path: '/both-entries.html',
+    selectId: 'b',
+    html: `
+      <!doctype html><html><body>
+        <div id="b">
+          <h2>Quarterly</h2>
+          <p>Prose above the table.</p>
+          <table><tr><th>Name</th><th>Age</th></tr><tr><td>Alice</td><td>30</td></tr></table>
+        </div>
+      </body></html>
+    `,
+  });
+
+  // Whatever one entry says the copy holds, the other says too.
+  for (const text of ['Quarterly', 'Prose above the table.', 'Alice']) {
+    expect(clip.plain).toContain(text);
+    expect(clip.html).toContain(text);
+  }
+  expect(clip.plain).toContain('| Name | Age |');
+  expect(clip.html).toContain('<th>Name</th>');
 });
