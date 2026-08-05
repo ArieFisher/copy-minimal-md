@@ -109,6 +109,31 @@ the signature above. Then read it back once more and confirm.
 
 This applies to a pull request you have just opened, and to nothing else.
 
+## Markup does not survive a pull request body
+
+Whatever writes a pull request body from here strips anything shaped like an
+HTML tag, and says nothing about it. `<img>` in a sentence disappears. So does
+one inside backticks — a code span comes back as an empty pair. A fenced block
+holding an example of markup comes back empty altogether, fence and all.
+
+This is not something the writing can work around. Entities inside a code span
+render as entities, so `&lt;img&gt;` reads as `&lt;img&gt;`, not as a tag.
+
+So, in a pull request body:
+
+- Name tags bare — `div`, `figure`, `img` — and say in one line why they are
+  written that way, so the next reader does not think it a typo.
+- Put the example itself in the repository, where nothing eats it: a fixture's
+  `notes.md`, or the module comment for the code under discussion. That is a
+  better home anyway. A pull request describes one change; the repository is
+  what the next person reads.
+- Read the body back after writing it. This is already the rule for the
+  footer, and it is the only way either problem is caught — both failures are
+  silent, and both leave a body that still reads as if it were fine.
+
+Apostrophes and quotes come back as `&#39;` and `&#34;`. Those render
+correctly and can be left alone.
+
 ## Never touch anything already merged
 
 Once work is merged it is a record of what was proposed and accepted, and it
