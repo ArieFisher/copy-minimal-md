@@ -49,19 +49,19 @@
      * the hotkey writes are then the same derivation, and cannot drift apart.
      */
     function toSimpleHtml(htmlText) {
-        return simplifyTables(collapseContainers(nameEmptyLinks(sanitize(repair(htmlText).repaired))));
+        return simplifyTables(collapseContainers(nameEmptyLinksAndImages(sanitize(repair(htmlText).repaired))));
     }
 
     function fromHtml(htmlText) {
         const { repaired, sourceType } = repair(htmlText);
 
-        const simpleHtml = simplifyTables(collapseContainers(nameEmptyLinks(sanitize(repaired))));
+        const simpleHtml = simplifyTables(collapseContainers(nameEmptyLinksAndImages(sanitize(repaired))));
 
         // The promotion happens on a throwaway parse so it reaches the Markdown
         // and nothing else.
         const mdDoc = new DOMParser().parseFromString(repaired, 'text/html');
         const promoted = promoteImplicitHeaders(mdDoc);
-        const markdown = toMarkdown(collapseContainers(nameEmptyLinks(sanitize(promoted ? mdDoc.body.innerHTML : repaired))));
+        const markdown = toMarkdown(collapseContainers(nameEmptyLinksAndImages(sanitize(promoted ? mdDoc.body.innerHTML : repaired))));
 
         return { markdown, simpleHtml, derivedFrom: 'text/html', sourceType };
     }
@@ -328,55 +328,78 @@
         return doc.body.innerHTML;
     }
 
-    /* ----------------------------------------------------------- empty links */
+    /* -------------------------------------------------- brackets with nothing in */
 
-    /** What an anchor the source never named is called. */
-    const UNNAMED_LINK = 'image…';
+    /** What something the source never named is called. */
+    const UNNAMED = 'image…';
 
     /** Where a name is looked for, best first. */
     const NAME_ATTRIBUTES = ['alt', 'aria-label', 'title'];
 
-    /** How much of the name stands in for the link text. */
+    /** How much of the name stands in for the missing text. */
     const NAME_PREVIEW_LENGTH = 4;
 
     /**
-     * Put a name back on a link sanitize emptied.
+     * Put a name on whatever reaches the Markdown as empty brackets.
      *
-     * The "see more headlines" control on a Google News card is an <a> around an
-     * inline <svg> icon. <svg> is not on the allowlist, and unlike a disallowed
-     * HTML tag it is removed with its whole subtree rather than unwrapped — so
-     * the anchor comes out of sanitize holding nothing and reads as `[](url)`:
-     * invisible in the Markdown, invisible in the Simple HTML, and impossible to
-     * tell apart from a copy that quietly lost something.
+     * Two things arrive that way, from the same card:
      *
-     * Such an anchor is named from what the source already said about it — its
-     * `alt`, else `aria-label`, else `title` — shown as the first few characters
-     * and an ellipsis, so the link is visible without a whole sentence standing
-     * in for an icon. The name in full goes to `title`, which a browser surfaces
-     * on hover and Turndown writes into the link. An anchor the source never
-     * named falls back to `image…`.
+     *   - `[](url)` — a link with no text. The "see more headlines" control is
+     *     an <a> around an inline <svg> icon, and <svg> is not on the allowlist.
+     *     Unlike a disallowed HTML tag it is removed with its whole subtree
+     *     rather than unwrapped, so the anchor comes out of sanitize holding
+     *     nothing at all.
+     *   - `![](url)` — an image with no alt. Nothing removed it; `alt=""` is the
+     *     source saying the picture is decorative, which the favicon and the
+     *     article thumbnail both do.
+     *
+     * Different causes, same result on screen: nothing, beside a URL, with no
+     * way to tell it apart from a copy that quietly lost something. So both are
+     * named the same way — from what the source already said about them, `alt`,
+     * else `aria-label`, else `title` — shown as the first few characters and an
+     * ellipsis, so a whole sentence never stands in for an icon. The name in
+     * full goes to `title`, which a browser surfaces on hover and Turndown
+     * writes into the link. Something the source never named falls back to
+     * `image…`.
+     *
+     * Naming the image is what lets the line breaks around it survive: the
+     * link-text tidy in `toMarkdown` starts at a `[`, and empty brackets give it
+     * nothing to close on, so it runs to the next `]` several lines away and
+     * flattens everything in between.
      *
      * Runs on sanitized markup: before it, the icon is still there and the
      * anchor still looks occupied.
      *
      * An anchor holding an <img> is left alone — it has something to show, and
-     * the image carries its own alt.
+     * the image is named in its own right.
      */
-    function nameEmptyLinks(html) {
+    function nameEmptyLinksAndImages(html) {
         const doc = new DOMParser().parseFromString(html, 'text/html');
-        const unnamed = Array.from(doc.querySelectorAll('a')).filter(
-            a => a.textContent.trim() === '' && !a.querySelector('img')
-        );
+        const unnamed = Array.from(doc.querySelectorAll('a, img')).filter(hasNothingToShow);
 
-        unnamed.forEach(a => {
+        unnamed.forEach(element => {
             const name = NAME_ATTRIBUTES
-                .map(attribute => (a.getAttribute(attribute) || '').trim())
+                .map(attribute => (element.getAttribute(attribute) || '').trim())
                 .find(Boolean);
-            a.textContent = name ? name.slice(0, NAME_PREVIEW_LENGTH).trimEnd() + '…' : UNNAMED_LINK;
-            if (name) a.setAttribute('title', name);
+            const preview = name ? name.slice(0, NAME_PREVIEW_LENGTH).trimEnd() + '…' : UNNAMED;
+
+            // An image says its own name in `alt`; an anchor says it as its text.
+            if (element.tagName === 'IMG') {
+                element.setAttribute('alt', preview);
+            } else {
+                element.textContent = preview;
+            }
+            if (name) element.setAttribute('title', name);
         });
 
         return unnamed.length > 0 ? doc.body.innerHTML : html;
+    }
+
+    /** Nothing to show: an anchor with no text of any kind, an image with no alt. */
+    function hasNothingToShow(element) {
+        return element.tagName === 'IMG'
+            ? (element.getAttribute('alt') || '').trim() === ''
+            : element.textContent.trim() === '' && !element.querySelector('img');
     }
 
     /**
@@ -483,10 +506,10 @@
         );
     }
 
-    // collapseContainers and nameEmptyLinks are exported for pipeline.js, whose
+    // collapseContainers and nameEmptyLinksAndImages are exported for pipeline.js, whose
     // Markdown path does its own sanitize and would otherwise need a second copy
     // of both.
-    global.Equivalents = { fromHtml, toSimpleHtml, isSameHtmlEntry, collapseContainers, nameEmptyLinks };
+    global.Equivalents = { fromHtml, toSimpleHtml, isSameHtmlEntry, collapseContainers, nameEmptyLinksAndImages };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) {

@@ -164,7 +164,7 @@
             htmlText = doc.body.innerHTML;
         }
 
-        const cleanHtml = Equivalents.collapseContainers(Equivalents.nameEmptyLinks(DOMPurify.sanitize(htmlText, {
+        const cleanHtml = Equivalents.collapseContainers(Equivalents.nameEmptyLinksAndImages(DOMPurify.sanitize(htmlText, {
             ALLOWED_TAGS, ALLOWED_ATTR, ALLOW_DATA_ATTR: false
         })));
 
