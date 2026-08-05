@@ -67,6 +67,36 @@ Set that before the first commit. A fresh container starts with the
 assistant's identity configured, and every commit made before you change it
 carries that name on GitHub for good.
 
+## Every pull request carries a version bump
+
+Increment the **patch** version in every pull request — `0.9.1` to `0.9.2`.
+Not sometimes, and not only for the ones that change behaviour: the number is
+how the owner tells what Chrome has loaded from what is on disk, and a docs-only
+change that leaves it alone makes the extension look unchanged when it is not.
+
+The version lives in three files and all three move together:
+
+- `manifest.json` — the one Chrome reads
+- `package.json`
+- `package-lock.json` — two entries, the root and the one under `packages`
+
+`npm version <number> --no-git-tag-version` does the last two, including both
+lock entries. `manifest.json` is a separate edit, and forgetting it is the
+failure to watch for, since it is the only one that reaches the browser.
+
+**A minor or major bump is the owner's call.** If a change looks like it wants
+one — a new feature, something that alters what a copy produces, anything that
+breaks an existing behaviour — do not decide it. Say what the change is and why
+it might warrant more than a patch, and ask. A patch bump chosen wrongly is
+cheap to correct; a minor one taken without asking has already told everyone
+reading the version what the release means.
+
+Two pull requests open at once cannot both take the same number, and the second
+to merge conflicts on the version line whatever the numbers are. Resolve it by
+taking the base branch's file and setting the version on top — never by taking
+the branch's whole file, which reverts everything else the base changed
+meanwhile.
+
 ## Attribution
 
 Do not attribute work to Claude, and do not record session identifiers
