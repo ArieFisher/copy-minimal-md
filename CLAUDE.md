@@ -149,10 +149,22 @@ holding an example of markup comes back empty altogether, fence and all.
 This is not something the writing can work around. Entities inside a code span
 render as entities, so `&lt;img&gt;` reads as `&lt;img&gt;`, not as a tag.
 
+It is not only tags. A Markdown image reference loses its leading `!`, so
+`![alt](url)` arrives as `[alt](url)` — the embedded image quietly demoted to a
+link. This happens in a fenced block too. It is the worse of the two failures:
+a stripped tag leaves an obvious hole, while this leaves valid Markdown that
+reads as though it were meant, differing from what was written by the one
+character that carried the meaning. Anything quoting Markdown output — a
+before-and-after of what a copy produces, most of all — is exactly what it
+lands on.
+
 So, in a pull request body:
 
 - Name tags bare — `div`, `figure`, `img` — and say in one line why they are
   written that way, so the next reader does not think it a typo.
+- Do not write an image reference at all. Say "a Markdown image reference to
+  `url`" in words. The literal cannot survive, and unlike a missing tag it will
+  not look missing.
 - Put the example itself in the repository, where nothing eats it: a fixture's
   `notes.md`, or the module comment for the code under discussion. That is a
   better home anyway. A pull request describes one change; the repository is
