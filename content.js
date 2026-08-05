@@ -4,10 +4,17 @@ console.log(`Docs Markdown Cleaner version: ${chrome.runtime.getManifest().versi
 /**
  * Write the cleaned copy back to the clipboard.
  *
- * A table goes out as both entries: the Markdown in text/plain, and the Simple
- * HTML in text/html so a paste into a rich-text editor lands a real table rather
- * than a screenful of pipes. Anything else is text/plain alone — writeText drops
- * the source app's text/html, which is the point of the hotkey.
+ * Every copy goes out as both entries: the Markdown in text/plain, and the
+ * Simple HTML in text/html, so a paste into a rich-text editor lands what the
+ * copy is — a real table, real headings, real links — rather than the syntax
+ * that spells it, while anywhere that prefers text keeps taking the Markdown.
+ * The source app's own text/html is replaced either way, which is the point of
+ * the hotkey: what arrives is this extension's markup, not the page's.
+ *
+ * text/plain alone is what a copy with no Simple HTML to write gets: plain text
+ * that is not TSV, where there was no HTML to simplify in the first place, and a
+ * payload that simplifies to nothing. writeText clears text/html, so the source
+ * app's entry does not survive that path either.
  */
 async function writeCleaned(markdown, simpleHtml) {
     if (!simpleHtml) {
@@ -130,8 +137,9 @@ if (!window.__tsvCleanerListenerRegistered) {
                 console.log("Docs Cleaner: HTML content found. Length:", htmlText.length);
                 console.groupCollapsed("Docs Cleaner: Processing HTML...");
 
-                const markdown = Pipeline.htmlToMarkdown(htmlText, { gridResult });
-                const simpleHtml = Pipeline.htmlToSimpleHtml(htmlText, { gridResult });
+                // One call for both entries — they are two renditions of one
+                // copy, and deriving them separately is how they drift apart.
+                const { markdown, simpleHtml } = Pipeline.htmlToEntries(htmlText, { gridResult });
 
                 await writeCleaned(markdown, simpleHtml);
 
@@ -162,7 +170,10 @@ if (!window.__tsvCleanerListenerRegistered) {
                     await TsvDetector.fire(detection);
                     flashSuccess("TSV Table Ready!");
                 } else {
-                    // Scrubs hidden metadata (RTF, vendor tags) by rewriting as clean text
+                    // Scrubs hidden metadata (RTF, vendor tags) by rewriting as clean text.
+                    // The one path with no text/html entry: there is no HTML to
+                    // simplify and no structure in the text to build one from —
+                    // TSV, the case where there is, was handled just above.
                     await navigator.clipboard.writeText(plainText);
                     console.log("Docs Cleaner: Plain text written to clipboard.");
                     flashSuccess("Cleaned (Text)!");

@@ -86,7 +86,7 @@ By contrast, if you copy with this library, it takes the **selected values** in 
 *   **Strips inline styles**: Removes font families, colors, and background highlights
 *   **Preserves structure**: Headings, bold, italics, links, lists, and tables
 *   **Clipboard integration**: Automatically updates the clipboard with clean Markdown
-*   **Tables paste as tables**: A copied table also goes to the clipboard as minimal HTML, so pasting into Gmail, Docs or Notion lands a real table rather than a screenful of pipes
+*   **Copies paste as what they are**: Every copy also goes to the clipboard as minimal HTML, so pasting into Gmail, Docs or Notion lands a real table, real headings and real links rather than a screenful of Markdown syntax. The Markdown is still there in `text/plain` for anywhere that prefers it
 *   **Jagged tables**: Copies selected values in the correct structure
 *   **ARIA tables**: Many sites no longer use traditional HTML `<table>` tags, but instead construct what looks like tables out of sophisticated HTML.
 *   **TSV tables**: When users copy a table, many websites will only give the clipboard tab-separated values. This library converts those into traditional tables for easier pasting.
@@ -99,7 +99,7 @@ By contrast, if you copy with this library, it takes the **selected values** in 
 2.  Press the keyboard shortcut:
     *   **Mac**: `Cmd + Shift + U`
     *   **Windows/Linux**: `Ctrl + Shift + U`
-3.  **Paste** (`Cmd+V` / `Ctrl+V`) — pastes clean Markdown, or a real table if you copied one and paste into a rich-text editor
+3.  **Paste** (`Cmd+V` / `Ctrl+V`) — a plain-text editor gets clean Markdown; a rich-text editor gets the copy's structure, formatted, with the source page's styling gone
 
 ## How It Works
 
@@ -115,7 +115,7 @@ By contrast, if you copy with this library, it takes the **selected values** in 
     *   **Synthesis**: If an ARIA grid was detected but the browser provided no HTML payload, the script synthesizes a table directly from the DOM extraction.
 5.  **Markdown Conversion**: Converts the final sanitized HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown).
 6.  **TSV Fallback**: If no HTML is present but the plain text looks like Tab-Separated Values (TSV), it converts the TSV data directly into a Markdown table.
-7.  **Clipboard Update**: Writes the final clean Markdown back to the clipboard as `text/plain`. If the copy is a table, the `text/html` entry is populated too, with the same "Simple HTML" table the Clipboard Inspector previews — so a paste into a rich-text editor lands a real table. A copy with no table is written as plain text alone, which clears whatever `text/html` the source page had put there.
+7.  **Clipboard Update**: Writes both equivalents back to the clipboard — the final clean Markdown as `text/plain`, and the same "Simple HTML" the Clipboard Inspector previews as `text/html`. Whichever the destination reaches for, it gets this extension's markup rather than the source page's: paste into an LLM or an editor and the Markdown arrives; paste into Gmail, Docs or Notion and the structure arrives, formatted. Both come from one derivation, so the two entries always describe the same copy. The exception is a copy that arrived as plain text and is not TSV: there is no HTML to simplify, so it is written as text alone — which still clears whatever `text/html` the source page had put there.
 
 ## Dependencies
 

@@ -4,8 +4,9 @@
  * Loads the extension's third-party libs (DOMPurify, Turndown, GFM plugin) into
  * the jsdom test environment and then `require`s the pure modules so tests can
  * call them directly:
- *   - pipeline.js     `htmlToMarkdown` / `gridToMarkdown` and their `…SimpleHtml`
- *                     counterparts — the cmd+shift+U path
+ *   - pipeline.js     `htmlToEntries` — the two clipboard entries cmd+shift+U
+ *                     writes — along with the single-entry accessors and the
+ *                     `grid…` pair for the no-clipboard-HTML path
  *   - equivalents.js  `fromHtml` — what the inspector derives from the clipboard
  *
  * No code is duplicated from content.js or inspector.js. Those two modules are
@@ -59,6 +60,7 @@ function getEquivalents() {
 }
 
 module.exports = {
+    get htmlToEntries() { return getPipeline().htmlToEntries; },
     get htmlToMarkdown() { return getPipeline().htmlToMarkdown; },
     get htmlToSimpleHtml() { return getPipeline().htmlToSimpleHtml; },
     get gridToMarkdown() { return getPipeline().gridToMarkdown; },

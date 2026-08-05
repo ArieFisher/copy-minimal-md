@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-const { htmlToMarkdown, htmlToSimpleHtml, gridToMarkdown, gridToSimpleHtml } = require('./_adapter.js');
+const { htmlToEntries, htmlToMarkdown, htmlToSimpleHtml, gridToMarkdown, gridToSimpleHtml, fromHtml } = require('./_adapter.js');
 
 describe('Pipeline.htmlToMarkdown', () => {
   it('converts simple HTML to Markdown', () => {
@@ -87,9 +87,27 @@ describe('Pipeline.htmlToSimpleHtml', () => {
     expect(html).toContain('<td>1</td>');
   });
 
-  it('returns nothing for prose, so text/plain goes out alone', () => {
-    expect(htmlToSimpleHtml('<h1>Title</h1><p>Body</p>')).toBe('');
+  it('returns the Simple HTML for prose too, not only for a table', () => {
+    const html = htmlToSimpleHtml('<h1>Title</h1><p>Body <a href="/x">link</a></p>');
+    expect(html).toContain('<h1>Title</h1>');
+    expect(html).toContain('<a href="/x">link</a>');
+  });
+
+  it('strips the source formatting from prose, same as it does from a table', () => {
+    const html = htmlToSimpleHtml(
+      '<p style="font-family: Arial; color: #ff0000"><span class="vendor-tag">Styled</span></p>'
+    );
+    expect(html).toContain('Styled');
+    expect(html).not.toContain('style=');
+    expect(html).not.toContain('class=');
+  });
+
+  it('returns nothing when the copy simplifies to nothing, so text/plain goes out alone', () => {
+    // '' is content.js's signal to write text/plain on its own. A blank
+    // text/html entry would instead paste as nothing.
     expect(htmlToSimpleHtml('')).toBe('');
+    expect(htmlToSimpleHtml('   ')).toBe('');
+    expect(htmlToSimpleHtml('<div><div></div></div>')).toBe('');
   });
 
   it('leaves a headerless copy headerless, unlike the Markdown', () => {
@@ -115,8 +133,65 @@ describe('Pipeline.htmlToSimpleHtml', () => {
     expect(html).not.toContain('flat text');
   });
 
-  it('stays empty when a grid copy has no table anywhere', () => {
-    expect(htmlToSimpleHtml('<div>flat text</div>', { gridResult: null })).toBe('');
+  it('carries a tableless grid copy through as its prose', () => {
+    // No grid was found, so there is nothing to repair — but the copy still has
+    // content, and content is what earns a text/html entry now.
+    expect(htmlToSimpleHtml('<div>flat text</div>', { gridResult: null })).toContain('flat text');
+  });
+});
+
+describe('Pipeline.htmlToEntries — the two entries describe one copy', () => {
+  /**
+   * Both entries used to be derived twice over: this module repaired a document
+   * for the Markdown and equivalents.js repaired its own for the Simple HTML.
+   * That was survivable while text/html was reserved for tables, since a copy
+   * the two could disagree about got no text/html at all. Now every copy writes
+   * both, so they come from one call — these pin that they cannot drift.
+   */
+  const PAYLOADS = {
+    prose: '<h1>Title</h1><p>Body</p>',
+    'a table': '<table><tr><td>Alice</td><td>30</td></tr></table>',
+    'a Google Docs copy': '<b style="font-weight:normal"><p>hello world</p></b>',
+    'a tracking beacon': '<p>Real text</p><img src="https://tracker.test/p.gif" width="1" height="1" alt="">',
+    'an ARIA grid the DOM pass missed': `
+      <div role="row"><span role="columnheader">A</span><span role="columnheader">B</span></div>
+      <div role="row"><span role="gridcell">1</span><span role="gridcell">2</span></div>`,
+  };
+
+  for (const [what, payload] of Object.entries(PAYLOADS)) {
+    it(`agrees with what the inspector derives from ${what}`, () => {
+      const entries = htmlToEntries(payload);
+      const inspector = fromHtml(payload);
+
+      expect(entries.markdown.trim()).toBe(inspector.markdown.trim());
+      expect(entries.simpleHtml.trim()).toBe(inspector.simpleHtml.trim());
+    });
+  }
+
+  it('reports an ARIA grid as a table in both entries, not one', () => {
+    // The clipboard payload kept the role attributes but GridDetector found
+    // nothing to hand over — the source repairs reconstruct the table, and
+    // because both entries come from them, neither is left reading it as prose.
+    const { markdown, simpleHtml } = htmlToEntries(PAYLOADS['an ARIA grid the DOM pass missed']);
+
+    expect(markdown).toContain('| A | B |');
+    expect(markdown).toContain('| 1 | 2 |');
+    expect(simpleHtml).toContain('<th>A</th>');
+    expect(simpleHtml).toContain('<td>2</td>');
+  });
+
+  it('applies the grid repair to both entries', () => {
+    const domTable = document.createElement('table');
+    domTable.innerHTML = '<thead><tr><th>P</th><th>Q</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody>';
+
+    const { markdown, simpleHtml } = htmlToEntries('<div>flat text from div grid</div>', {
+      gridResult: { type: 'aria', tables: [domTable] },
+    });
+
+    expect(markdown).toContain('| P | Q |');
+    expect(simpleHtml).toContain('<th>P</th>');
+    expect(markdown).not.toContain('flat text');
+    expect(simpleHtml).not.toContain('flat text');
   });
 });
 
