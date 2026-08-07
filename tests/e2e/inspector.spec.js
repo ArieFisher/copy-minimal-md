@@ -321,6 +321,185 @@ test('every pane fills the card it sits in, in both views', async ({ context, se
   }
 });
 
+/* ------------------------------------------------------------ preview zoom */
+
+/**
+ * A table `rows` deep, as both entries a spreadsheet copy would leave.
+ *
+ * The cells carry the styling a spreadsheet writes, and that is not decoration
+ * here: strip it and the derived Simple HTML is the payload back again, the
+ * card goes inert, and the row loses the pane these tests are about.
+ */
+function tableCopy(rows) {
+  const cells = Array.from({ length: rows }, (_, i) => [`Region ${i + 1}`, `${(i + 1) * 1000}`]);
+  const td = (text) => `<td style="border: 1px solid rgb(204, 204, 204); padding: 2px 3px;">${text}</td>`;
+  return {
+    plain: cells.map((row) => row.join('\t')).join('\n'),
+    html: '<table style="font-size: 10pt; font-family: Arial; border-collapse: collapse;"><tbody>'
+      + cells.map(([name, n]) => `<tr style="height: 21px;">${td(name)}${td(n)}</tr>`).join('')
+      + '</tbody></table>',
+  };
+}
+
+/** Overruns every pane's cap at 100%, and fits inside them well above the
+ *  floor — so Fit is doing the arithmetic and not just bottoming out. */
+const TALL_COPY = tableCopy(10);
+
+/** Past what 50% can rescue. The floor holds and the pane scrolls, the way it
+ *  did before there was a zoom at all. */
+const ENDLESS_COPY = tableCopy(40);
+
+/** The scale the panes are actually drawing at. */
+function previewZoom(page) {
+  return page.evaluate(() =>
+    parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--preview-zoom')));
+}
+
+/** Every pane still holding content past its cap, named by the card it sits in. */
+function panesStillScrolling(page) {
+  return page.evaluate(() => [...document.querySelectorAll('.zoom-layer')]
+    .filter((layer) => layer.parentElement.scrollHeight - layer.parentElement.clientHeight > 1)
+    .map((layer) => layer.closest('.card').className));
+}
+
+async function pickZoom(page, value) {
+  await page.locator('#zoom-trigger').click();
+  await page.locator(`.zoom-option[data-zoom="${value}"]`).click();
+}
+
+/**
+ * The size of things that are not the payload, and of one thing that is.
+ *
+ * The payload is measured by height. A table cell's width is bounded by the
+ * pane it sits in, and zooming out hands the layer more room in layout pixels
+ * than it hands back in scale — so a full-width table can come out the same
+ * width at 50% as at 200%. Its rows cannot.
+ */
+function boxes(page) {
+  return page.evaluate(() => {
+    const box = (sel) => {
+      const rect = document.querySelector(sel).getBoundingClientRect();
+      return `${Math.round(rect.width)}x${Math.round(rect.height)}`;
+    };
+    return {
+      mime: box('.card--plain .card-name-mime'),
+      replace: box('.replace-btn'),
+      title: box('.app-bar-title h1'),
+      toggle: box('#view-toggle'),
+      rowHeight: document.querySelector('.card--simple-html .card-render td')
+        .getBoundingClientRect().height,
+    };
+  });
+}
+
+test('opens at Fit, with the whole payload inside the panes', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    ...TALL_COPY,
+  });
+
+  await expect(page.locator('#zoom-value')).toHaveText('Fit');
+  expect(await previewZoom(page)).toBeLessThan(1);
+  expect(await panesStillScrolling(page)).toEqual([]);
+
+  // …and the payload is one that would not have fitted on its own, which is
+  // what makes the line above mean anything.
+  await pickZoom(page, '1');
+  expect((await panesStillScrolling(page)).length).toBeGreaterThan(0);
+});
+
+test('Fit stops at 50% rather than shrink a payload out of legibility', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, { ...ENDLESS_COPY });
+
+  // Some copies cannot be seen whole at any size worth reading. Fit goes as far
+  // as the floor and no further, and what is left over scrolls — which is what
+  // the pane did before there was a zoom at all.
+  await expect(page.locator('#zoom-value')).toHaveText('Fit');
+  expect(await previewZoom(page)).toBe(0.5);
+  expect((await panesStillScrolling(page)).length).toBeGreaterThan(0);
+});
+
+test('Fit does not enlarge a payload that already fits', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    plain: 'Heading\nsome text',
+    html: '<h1>Heading</h1><p>some <b>text</b></p>',
+  });
+
+  await expect(page.locator('#zoom-value')).toHaveText('Fit');
+  expect(await previewZoom(page)).toBe(1);
+});
+
+test('the chrome holds its size while the payload scales', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    ...TALL_COPY,
+  });
+
+  await pickZoom(page, '0.5');
+  const small = await boxes(page);
+  await pickZoom(page, '2');
+  const large = await boxes(page);
+
+  // The zoom is doing something…
+  expect(large.rowHeight).toBeGreaterThan(small.rowHeight * 3);
+
+  // …and none of it reaches the things the grid is read and operated with.
+  // Soft, so a control that did move is named alongside any others.
+  for (const part of ['mime', 'replace', 'title', 'toggle']) {
+    expect.soft(large[part], part).toBe(small[part]);
+  }
+});
+
+test('a level picked by hand replaces Fit, and Fit comes back', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    ...TALL_COPY,
+  });
+
+  await pickZoom(page, '1.25');
+  await expect(page.locator('#zoom-value')).toHaveText('125%');
+  expect(await previewZoom(page)).toBe(1.25);
+  await expect(page.locator('.zoom-option[data-zoom="1.25"]')).toHaveAttribute('aria-selected', 'true');
+
+  // The menu shuts behind the choice, and Escape is not needed to prove it.
+  await expect(page.locator('#zoom-menu')).toBeHidden();
+
+  await pickZoom(page, 'fit');
+  await expect(page.locator('#zoom-value')).toHaveText('Fit');
+  expect(await previewZoom(page)).toBeLessThan(1);
+  expect(await panesStillScrolling(page)).toEqual([]);
+});
+
+test('re-fits when the view switches', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
+
+  const rendered = await previewZoom(page);
+
+  // Source shows the markup rather than the table it draws, and clipboard
+  // markup stands far taller than the thing it describes. Same payload, a
+  // different number — Fit is measured against what is on the page now, not
+  // remembered from what was on it before.
+  await page.locator('#view-toggle .segment[data-view="source"]').click();
+  await expect(page.locator('.card--html .card-source')).toBeVisible();
+  await expect(page.locator('#zoom-value')).toHaveText('Fit');
+  expect(await previewZoom(page)).toBeLessThan(rendered);
+});
+
+test('re-fits when a pane starts wrapping', async ({ context, server, extensionId }) => {
+  // One long line, which is one line tall until it is wrapped. Everything else
+  // in this copy is small, so the wrap toggle is the only thing that can move
+  // the number.
+  const longLine = 'lorem ipsum dolor sit amet '.repeat(25).trim();
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    plain: longLine,
+    html: '<p>a short paragraph</p>',
+  });
+
+  expect(await previewZoom(page)).toBe(1);
+
+  await page.locator('.card--plain .wrap-btn').click();
+  await expect(page.locator('.card--plain .card-source')).toHaveClass(/is-wrapped/);
+  expect(await previewZoom(page)).toBeLessThan(1);
+  expect(await panesStillScrolling(page)).toEqual([]);
+});
+
 /** A 96×96 square, standing in for a favicon: the natural size a news site
  *  serves one at, and four times the size the page actually draws it. */
 const SQUARE_96 = 'data:image/svg+xml;base64,' + Buffer.from(

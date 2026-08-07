@@ -48,6 +48,11 @@
      the two clipboard cards. Change both together. */
   --row-gap: 18px;
   --row-gap-half: 9px;
+
+  /* The scale every preview pane draws its payload at. 1 is 100%; inspector.js
+     writes it on the root element. Nothing else on the page reads it, which is
+     the point — the chrome holds its size at every level. */
+  --preview-zoom: 1;
 }
 
 body {
@@ -122,6 +127,139 @@ body {
   background: var(--card-bg);
   color: var(--text-primary);
   box-shadow: 0 1px 3px rgba(60, 50, 20, 0.15);
+}
+
+.app-bar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border-neutral);
+}
+
+/* ------------------------------------------------------------ preview zoom */
+
+.zoom {
+  position: relative;
+}
+
+.zoom-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  min-width: 88px;
+  padding: 6px 9px 6px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-control);
+  border-radius: 10px;
+  color: var(--text-primary);
+  /* A percentage is a measurement, so it is set the way every other
+     measurement here is: mono, and tabular so the box does not twitch on the
+     way from 50% to 125%. */
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.zoom-trigger:hover {
+  border-color: var(--action);
+}
+
+.zoom-trigger:focus-visible,
+.zoom-trigger[aria-expanded="true"] {
+  outline: none;
+  border-color: var(--action);
+  box-shadow: 0 0 0 3px rgba(95, 115, 70, 0.22);
+}
+
+/* Fit is a mode, not a measurement, so the box changes face when it holds one
+   — the same serif that names a derived format on a card. */
+.zoom-trigger.is-fit .zoom-value {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.zoom-caret {
+  color: var(--text-tertiary);
+  transition: transform 0.16s ease;
+}
+
+.zoom-trigger[aria-expanded="true"] .zoom-caret {
+  transform: rotate(180deg);
+}
+
+.zoom-menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 30;
+  min-width: 100%;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--card-bg);
+  border: 1px solid var(--border-neutral);
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(60, 50, 20, 0.2);
+}
+
+.zoom-menu[hidden] {
+  display: none;
+}
+
+.zoom-option {
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.zoom-option--fit {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.zoom-option:hover,
+.zoom-option.is-cursor {
+  background: var(--control-fill);
+  color: var(--text-primary);
+}
+
+.zoom-option[aria-selected="true"] {
+  background: var(--control-fill);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.zoom-sep {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--border-hairline);
+}
+
+/* Every pane's payload hangs off one of these. The zoom goes here and not on
+   the pane, because `zoom` scales an element's own specified lengths too: on
+   .card-render it would take the 200px cap with it, and the cards would grow
+   and shrink instead of showing more and less of what is in them. */
+.zoom-layer {
+  zoom: var(--preview-zoom);
+}
+
+/* A <pre>'s layer is a <span> — the only thing a <pre> may contain. */
+.card-source>.zoom-layer {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zoom-caret {
+    transition: none;
+  }
 }
 
 /* --------------------------------------------------- loading / error state */

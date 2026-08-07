@@ -59,6 +59,11 @@ function prettyPrintHtml(html, { uppercaseTags = false } = {}) {
 
 const state = {
     view: 'rendered',            // 'rendered' | 'source'
+    // How big the preview panes draw the payload: 'fit', or a scale like 1.25.
+    // Every inspect starts at Fit — a copy is worth seeing whole before it is
+    // worth reading, and the size that takes is a property of the copy, not
+    // something the user should have to ask for each time.
+    zoom: 'fit',
     // Per-pane line wrapping in the source view. Off by default: long lines run
     // off the edge and the pane scrolls, keeping the payload's real line
     // structure readable.
@@ -230,6 +235,10 @@ async function readClipboard() {
         state.mdDone = false;
         state.htmlDone = false;
         state.extras = extras;
+        // A different copy is a different inspect, and every inspect opens on
+        // the whole of what was copied. A level chosen for the payload that
+        // just left is not a level chosen for this one.
+        state.zoom = 'fit';
 
         let derived = null;
         try {
@@ -325,9 +334,33 @@ function buildWrapToggle(key) {
     return button;
 }
 
+/**
+ * Every pane hangs its payload off one of these, and the preview zoom scales
+ * the layer rather than the pane — see the note on .zoom-layer in the
+ * stylesheet for why the pane itself must not carry it.
+ *
+ * A <pre> may only contain phrasing content, so its layer is a <span> that the
+ * stylesheet makes a block.
+ */
+function buildZoomLayer(tag = 'div') {
+    return el(tag, 'zoom-layer');
+}
+
 /** A source <pre> that honours the pane's own wrap setting. */
 function buildSourcePre(key, text) {
-    return el('pre', state.wrap[key] ? 'card-source is-wrapped' : 'card-source', text);
+    const pre = el('pre', state.wrap[key] ? 'card-source is-wrapped' : 'card-source');
+    const layer = buildZoomLayer('span');
+    layer.textContent = text;
+    pre.appendChild(layer);
+    return pre;
+}
+
+/** A rendered pane, with its layer already in place. Returns both. */
+function buildRenderPane() {
+    const pane = el('div', 'card-render');
+    const layer = buildZoomLayer();
+    pane.appendChild(layer);
+    return { pane, layer };
 }
 
 /**
@@ -402,6 +435,9 @@ function render() {
 
     const extras = buildExtras();
     if (extras) container.appendChild(extras);
+
+    // Last, and after the panes are in the document: Fit has to measure them.
+    applyZoom();
 }
 
 function buildBanner() {
@@ -540,9 +576,9 @@ function buildHtmlCard() {
         const source = prettyPrintHtml(redactBase64(state.current.html), { uppercaseTags: true });
         card.appendChild(buildSourcePre('html', source || '[Empty String]'));
     } else {
-        const body = el('div', 'card-render');
-        renderHtmlInto(body, state.current.html, { keepStyles: true });
-        card.appendChild(body);
+        const { pane, layer } = buildRenderPane();
+        renderHtmlInto(layer, state.current.html, { keepStyles: true });
+        card.appendChild(pane);
     }
 
     return card;
@@ -611,13 +647,13 @@ function buildMarkdownCard() {
     if (state.view === 'source') {
         card.appendChild(buildSourcePre('markdown', state.equivalents.markdown));
     } else {
-        const body = el('div', 'card-render');
+        const { pane, layer } = buildRenderPane();
         if (typeof marked !== 'undefined') {
-            renderHtmlInto(body, marked.parse(state.equivalents.markdown, { breaks: true }));
+            renderHtmlInto(layer, marked.parse(state.equivalents.markdown, { breaks: true }));
         } else {
-            body.textContent = state.equivalents.markdown;
+            layer.textContent = state.equivalents.markdown;
         }
-        card.appendChild(body);
+        card.appendChild(pane);
     }
 
     return card;
@@ -644,9 +680,9 @@ function buildSimpleHtmlCard() {
     if (state.view === 'source') {
         card.appendChild(buildSourcePre('simpleHtml', prettyPrintHtml(state.equivalents.simpleHtml)));
     } else {
-        const body = el('div', 'card-render');
-        renderHtmlInto(body, state.equivalents.simpleHtml);
-        card.appendChild(body);
+        const { pane, layer } = buildRenderPane();
+        renderHtmlInto(layer, state.equivalents.simpleHtml);
+        card.appendChild(pane);
     }
 
     return card;
@@ -751,12 +787,12 @@ function buildExtraCard({ type, blob }) {
     card.appendChild(head);
 
     if (type.startsWith('image/')) {
-        const body = el('div', 'card-render');
+        const { pane, layer } = buildRenderPane();
         const img = document.createElement('img');
         img.src = URL.createObjectURL(blob);
         img.alt = `Clipboard image (${type})`;
-        body.appendChild(img);
-        card.appendChild(body);
+        layer.appendChild(img);
+        card.appendChild(pane);
     } else {
         card.appendChild(el('div', 'card-empty', 'No preview available for this type.'));
     }
@@ -791,13 +827,13 @@ function buildAriaBypassCard(ariaPreview) {
     if (state.view === 'source') {
         card.appendChild(buildSourcePre('aria', markdown || '[Empty]'));
     } else {
-        const body = el('div', 'card-render');
+        const { pane, layer } = buildRenderPane();
         if (typeof marked !== 'undefined') {
-            renderHtmlInto(body, marked.parse(markdown, { breaks: true }));
+            renderHtmlInto(layer, marked.parse(markdown, { breaks: true }));
         } else {
-            body.textContent = markdown;
+            layer.textContent = markdown;
         }
-        card.appendChild(body);
+        card.appendChild(pane);
     }
 
     const foot = el('div', 'card-foot');
@@ -819,6 +855,201 @@ function buildAriaBypassCard(ariaPreview) {
     card.appendChild(foot);
 
     return card;
+}
+
+/* ----------------------------------------------------------- preview zoom */
+
+/** The ladder the menu offers, and what the keyboard shortcuts step through. */
+const ZOOM_STEPS = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2];
+
+/**
+ * Fit stops here. Below it the payload is no longer readable, and a pane that
+ * cannot fit even at 50% goes back to doing what it always did — showing what
+ * it can and scrolling for the rest.
+ */
+const ZOOM_FIT_FLOOR = 0.5;
+
+const zoomEls = {};   // filled in at DOMContentLoaded
+
+function setPreviewZoom(scale) {
+    document.documentElement.style.setProperty('--preview-zoom', String(scale));
+}
+
+/** True when no pane is still holding content past its cap. */
+function everyPaneClears() {
+    for (const layer of document.querySelectorAll('.zoom-layer')) {
+        const pane = layer.parentElement;
+        if (pane.scrollHeight - pane.clientHeight > 1) return false;
+    }
+    return true;
+}
+
+/**
+ * Fit: the largest scale at which every pane's content clears its own cap.
+ *
+ * One scale for the whole page, not one per pane. Packing each pane
+ * separately would fit more in, but a row of this grid exists to be compared
+ * against itself, and two panes drawn at different scales cannot be.
+ *
+ * Measured at 1, because a pane already scaled reports scaled numbers. The
+ * pane's padding does not scale with the layer inside it, so it comes off the
+ * available height before the ratio is taken.
+ *
+ * The arithmetic gives a first guess and not the answer: a scaled table row
+ * rounds up to a whole layout unit, so ten of them land a few pixels past
+ * where the ratio said they would and the pane scrolls after all. From the
+ * guess it walks down a percent at a time until every pane clears.
+ *
+ * Width is left alone. Long lines are the line-wrap toggle's job, one pane at
+ * a time, and Fit does not touch it.
+ */
+function computeFit() {
+    setPreviewZoom(1);
+
+    let ratio = 1;
+    for (const layer of document.querySelectorAll('.zoom-layer')) {
+        const pane = layer.parentElement;
+        const box = getComputedStyle(pane);
+        const available = pane.clientHeight
+            - parseFloat(box.paddingTop) - parseFloat(box.paddingBottom);
+        const needed = layer.scrollHeight;
+        if (needed > available && available > 0) ratio = Math.min(ratio, available / needed);
+    }
+
+    // Never larger than life: Fit shows the whole payload, it does not enlarge
+    // one that already fits.
+    let scale = Math.max(ZOOM_FIT_FLOOR, Math.floor(Math.min(ratio, 1) * 100) / 100);
+    setPreviewZoom(scale);
+
+    for (let step = 0; step < 12 && scale > ZOOM_FIT_FLOOR && !everyPaneClears(); step++) {
+        scale = Math.max(ZOOM_FIT_FLOOR, Math.round(scale * 100 - 1) / 100);
+        setPreviewZoom(scale);
+    }
+
+    return scale;
+}
+
+/**
+ * Put the current choice on the page. Fit is recomputed here rather than
+ * remembered: render() has just rebuilt the panes it was measured against, and
+ * a wrap toggle or a view switch changes how tall the same payload stands.
+ */
+function applyZoom() {
+    const isFit = state.zoom === 'fit';
+    setPreviewZoom(isFit ? computeFit() : state.zoom);
+
+    if (!zoomEls.trigger) return;
+    zoomEls.value.textContent = isFit ? 'Fit' : `${Math.round(state.zoom * 100)}%`;
+    zoomEls.trigger.classList.toggle('is-fit', isFit);
+
+    const selected = isFit ? 'fit' : String(state.zoom);
+    zoomEls.options.forEach(option => {
+        option.setAttribute('aria-selected', String(option.dataset.zoom === selected));
+    });
+}
+
+function setZoom(choice) {
+    state.zoom = choice === 'fit' ? 'fit' : parseFloat(choice);
+    applyZoom();
+}
+
+/** Step to the next rung of the ladder from wherever the panes are drawn now. */
+function stepZoom(direction) {
+    const current = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--preview-zoom')
+    ) || 1;
+    const next = direction > 0
+        ? ZOOM_STEPS.find(step => step > current + 0.001)
+        : [...ZOOM_STEPS].reverse().find(step => step < current - 0.001);
+    if (next !== undefined) setZoom(String(next));
+}
+
+function openZoomMenu() {
+    zoomEls.menu.hidden = false;
+    zoomEls.trigger.setAttribute('aria-expanded', 'true');
+    zoomEls.cursor = Math.max(0, zoomEls.options.findIndex(o => o.getAttribute('aria-selected') === 'true'));
+    markZoomCursor();
+}
+
+function closeZoomMenu() {
+    zoomEls.menu.hidden = true;
+    zoomEls.trigger.setAttribute('aria-expanded', 'false');
+    zoomEls.trigger.removeAttribute('aria-activedescendant');
+    zoomEls.options.forEach(option => option.classList.remove('is-cursor'));
+}
+
+/** The keyboard's own place in the menu, which is not the selected option. */
+function markZoomCursor() {
+    zoomEls.options.forEach((option, i) => option.classList.toggle('is-cursor', i === zoomEls.cursor));
+    const option = zoomEls.options[zoomEls.cursor];
+    zoomEls.trigger.setAttribute('aria-activedescendant', option.id);
+    option.scrollIntoView({ block: 'nearest' });
+}
+
+function moveZoomCursor(delta) {
+    zoomEls.cursor = (zoomEls.cursor + delta + zoomEls.options.length) % zoomEls.options.length;
+    markZoomCursor();
+}
+
+function wireZoomControl() {
+    zoomEls.trigger = document.getElementById('zoom-trigger');
+    zoomEls.value = document.getElementById('zoom-value');
+    zoomEls.menu = document.getElementById('zoom-menu');
+    zoomEls.options = [...zoomEls.menu.querySelectorAll('.zoom-option')];
+    zoomEls.cursor = 0;
+
+    zoomEls.trigger.addEventListener('click', () => {
+        zoomEls.menu.hidden ? openZoomMenu() : closeZoomMenu();
+    });
+
+    zoomEls.menu.addEventListener('click', (event) => {
+        const option = event.target.closest('.zoom-option');
+        if (!option) return;
+        setZoom(option.dataset.zoom);
+        closeZoomMenu();
+        zoomEls.trigger.focus();
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!zoomEls.menu.hidden && !event.target.closest('#zoom')) closeZoomMenu();
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (!zoomEls.menu.hidden) {
+            if (event.key === 'Escape') { closeZoomMenu(); zoomEls.trigger.focus(); return; }
+            if (event.key === 'ArrowDown') { event.preventDefault(); moveZoomCursor(1); return; }
+            if (event.key === 'ArrowUp') { event.preventDefault(); moveZoomCursor(-1); return; }
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setZoom(zoomEls.options[zoomEls.cursor].dataset.zoom);
+                closeZoomMenu();
+                zoomEls.trigger.focus();
+                return;
+            }
+        }
+
+        // The editor shortcuts. This page has one thing worth resizing, so they
+        // are taken from the browser and pointed at the panes.
+        if (!(event.ctrlKey || event.metaKey)) return;
+        if (event.key === '=' || event.key === '+') {
+            event.preventDefault();
+            stepZoom(1);
+        } else if (event.key === '-') {
+            event.preventDefault();
+            stepZoom(-1);
+        } else if (event.key === '0') {
+            event.preventDefault();
+            setZoom('fit');
+        }
+    });
+
+    // A narrower window re-wraps the payload, which changes how tall it stands,
+    // which changes what Fit is.
+    let pending = null;
+    window.addEventListener('resize', () => {
+        if (state.zoom !== 'fit' || pending) return;
+        pending = requestAnimationFrame(() => { pending = null; applyZoom(); });
+    });
 }
 
 /* ----------------------------------------------------------------- wiring */
@@ -844,6 +1075,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('#view-toggle .segment').forEach(btn => {
         btn.addEventListener('click', () => setView(btn.dataset.view));
     });
+
+    wireZoomControl();
 
     if (document.hasFocus()) {
         readClipboard();

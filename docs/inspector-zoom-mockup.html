@@ -8,12 +8,12 @@
 
   <!-- =====================================================================
        MOCKUP — not part of the extension. Open it in a browser to try the
-       proposed control; nothing here is loaded by manifest.json.
+       control on its own; nothing here is loaded by manifest.json, and the
+       shipped version lives in inspector.html, inspector.css and inspector.js.
 
-       What is being proposed: a zoom control in the inspector's app bar, of
-       the kind a document editor puts next to its view controls — a value
-       box reading "100%", and a menu offering Fit and a ladder of fixed
-       percentages.
+       What it shows: a zoom control in the inspector's app bar, of the kind a
+       document editor puts next to its view controls — a value box, and a
+       menu offering Fit and a ladder of fixed percentages.
 
        Why the inspector wants one: every preview pane in the grid is capped
        (200px, or 300px on the HTML row) and scrolls past the cap. A copy out
@@ -23,7 +23,7 @@
        for extent: at 75% the whole table is in the frame, and both columns
        can be taken in at a glance.
 
-       Three decisions are on show here, and each is reversible:
+       Three decisions it carries:
 
        1. Zoom moves the preview panes, not the page. Card headers, byte
           counts, the replace buttons and the app bar all hold their size.
@@ -39,7 +39,7 @@
           the inspector's existing rule carried over: measurements are
           monospace, named things are serif.
 
-       Implementation note, for when this stops being a mockup: the zoom sits
+       Implementation note, carried over into the shipped code: the zoom sits
        on an inner `.zoom-layer`, never on `.card-render` / `.card-source`
        themselves. `zoom` scales the element's own specified lengths too, so
        a pane carrying it would have its `max-height: 200px` scaled along
@@ -218,7 +218,7 @@
       color: var(--frame-fg);
     }
 
-    .open-qs {
+    .decisions {
       background: var(--frame-surface);
       border: 1px dashed var(--frame-line);
       border-radius: 12px;
@@ -228,13 +228,13 @@
       gap: 8px;
     }
 
-    .open-qs h2 {
+    .decisions h2 {
       font-family: Georgia, 'Times New Roman', serif;
       font-size: 15.5px;
       margin: 0;
     }
 
-    .open-qs ul {
+    .decisions ul {
       margin: 0;
       padding-left: 20px;
       display: flex;
@@ -769,7 +769,7 @@
   <div class="page">
 
     <div class="page-head">
-      <span class="eyebrow">Clipboard Inspector · proposal</span>
+      <span class="eyebrow">Clipboard Inspector · design record</span>
       <h1>A zoom control for the preview panes</h1>
       <p>
         The panes are capped and scroll past the cap, so a spreadsheet copy shows its first
@@ -780,7 +780,8 @@
 
     <div class="try-it">
       <strong>It works — try it.</strong>
-      <span>The menu is open the way you'd first see it. Pick a level and watch the four panes, not the chrome.</span>
+      <span>It opens at Fit, the way the inspector does, with the menu showing. Pick a level and
+        watch the four panes, not the chrome.</span>
       <span><kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd> work too.</span>
     </div>
 
@@ -1158,14 +1159,17 @@ ANZ	208,730	226,910	+8.7%</span></pre>
       </div>
     </div>
 
-    <div class="open-qs">
-      <h2>Still open</h2>
+    <div class="decisions">
+      <h2>Settled</h2>
       <ul>
-        <li>Does the level survive a re-read, or does every inspect start at 100%?</li>
-        <li>Fit floors at 50% here. A 200-row paste will not fit at any readable size — is a floor
-          the right answer, or should Fit refuse and say so?</li>
-        <li>Zooming out only helps a wide source pane so far, since Fit measures height. The line-wrap
-          toggle already covers width — should Fit consider it?</li>
+        <li><strong>Every inspect opens at Fit.</strong> Nothing is remembered between reads: a copy
+          is worth seeing whole before it is worth reading, and the size that takes belongs to the
+          copy, not to the last one.</li>
+        <li><strong>Fit stops at 50%.</strong> Past that the payload is no longer readable, so a copy
+          too long to fit goes back to doing what it always did — showing what it can, and scrolling
+          for the rest.</li>
+        <li><strong>Width is left to the wrap toggle.</strong> Fit measures height only. Long lines
+          are a per-pane question, and the toggle in each card head already answers it.</li>
       </ul>
     </div>
 
@@ -1302,8 +1306,10 @@ ANZ	208,730	226,910	+8.7%</span></pre>
         }
       });
 
-      // Open on load, so the first look at this page matches the control it
-      // is proposing. A real inspector would open closed.
+      // Open at Fit, the way the inspector itself does, with the menu showing —
+      // so the first look at this page is both the state it starts in and the
+      // control that changes it. The real inspector opens the menu closed.
+      apply('fit');
       openMenu();
     })();
   </script>
