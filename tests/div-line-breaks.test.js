@@ -154,3 +154,120 @@ describe('multi-div cells degrade the lost break to <br>, not glued text', () =>
     expect(html).toContain('<td>line one<br>line two</td>');
   });
 });
+
+// A link whose content is itself block-level divs (a card pattern, e.g. a
+// Google Finance stock row: one <a> wrapping ticker/name/price/change divs)
+// can't keep those divs' block breaks as literal newlines — a Markdown link
+// label can't safely span a blank line. Before this fix, the whitespace
+// collapse in `toMarkdown` that trims incidental link-text padding couldn't
+// tell that padding apart from a real div boundary, and flattened both to a
+// single bare space: every field ran together with nothing marking where one
+// ended and the next began. It should now separate them with an em dash
+// while still keeping the whole label on one line.
+describe('a link wrapping block-level children separates its fields, on one line', () => {
+  const financeCardHtml =
+    '<a href="https://www.google.com/finance/beta/quote/AII:TSE">' +
+    '<div><div><div>AII</div><div>Almonty Industries Inc</div></div>' +
+    '<div><div>$15.51</div><div>-4.96%&nbsp;<div><i>arrow_downward</i></div></div></div>' +
+    '</div></a>';
+
+  it('joins the ticker, name, price, change and icon with em dashes on one line', () => {
+    const md = htmlToMarkdown(financeCardHtml).trim();
+
+    expect(md).toBe(
+      '[AII — Almonty Industries Inc — $15.51 — \\-4.96% — _arrow\\_downward_]' +
+      '(https://www.google.com/finance/beta/quote/AII:TSE)'
+    );
+    expect(md.split('\n')).toHaveLength(1);
+  });
+
+  it('leaves a link with a single inline-only child unchanged (no em dash introduced)', () => {
+    const md = htmlToMarkdown('<a href="https://example.com">Simple text</a>').trim();
+
+    expect(md).toBe('[Simple text](https://example.com)');
+    expect(md).not.toContain('—');
+  });
+
+  it('still collapses incidental whitespace (no real block boundary) to a single space', () => {
+    const md = htmlToMarkdown('<a href="https://example.com">\n  Simple\n  text\n</a>').trim();
+
+    expect(md).toBe('[Simple text](https://example.com)');
+    expect(md).not.toContain('—');
+  });
+
+  it('separates an image field from the text fields around it (news-card icon link)', () => {
+    // A favicon <img> alongside headline/timestamp divs — a common news-card
+    // link shape (distinct from tests/fixtures/google-news-icon-link/, whose
+    // icon is an inline <svg>, not an <img>). Turndown converts the <img> to
+    // its own ![alt](src) field before this rule ever sees it, so it has to
+    // survive being one of the joined fields rather than being mistaken for
+    // the end of the link (a document-wide regex would stop matching at the
+    // image's own closing `](`, which is what this rule replaced).
+    const html =
+      '<a href="https://u"><div><img src="f.png" alt="Reuters"></div>' +
+      '<div>Headline text</div><div>8 hours ago</div></a>';
+    const md = htmlToMarkdown(html).trim();
+
+    expect(md).toBe('[![Reuters](f.png) — Headline text — 8 hours ago](https://u)');
+    expect(md.split('\n')).toHaveLength(1);
+  });
+
+  it('introduces no separator when the link wraps exactly one block-level child', () => {
+    const md = htmlToMarkdown('<a href="https://example.com"><div>only</div></a>').trim();
+
+    expect(md).toBe('[only](https://example.com)');
+    expect(md).not.toContain('—');
+  });
+
+  it('still finds the boundary when a block child sits between plain inline text', () => {
+    const md = htmlToMarkdown(
+      '<a href="https://example.com">lead text<div>block</div>trail text</a>'
+    ).trim();
+
+    expect(md).toBe('[lead text — block — trail text](https://example.com)');
+  });
+
+  it('does not let an unrelated bracket earlier in the document leak an em dash into a later link', () => {
+    // Regression guard for the old document-wide regex, which paired a stray
+    // "[" in prose with the next real link's "]" and glued the two paragraphs
+    // together. Scoping the rule to one anchor's own content means there is
+    // nothing else for it to match against.
+    const md = htmlToMarkdown(
+      '<p>see [note] for detail</p><p><a href="http://x">real link</a></p>'
+    ).trim();
+
+    expect(md).toBe('see \\[note\\] for detail\n\n[real link](http://x)');
+  });
+
+  it('keeps a table cell link on one row, break intact, when the cell had multiple divs', () => {
+    // inlineCellDivs (equivalents.js) already turns cell divs into
+    // <span><br><span> before Turndown ever runs, so a link wrapping them has
+    // no <div> boundary left to split on — just the <br>'s own newline
+    // sitting inside one field. Collapsing all whitespace to a space here
+    // would erase it before GFM's cell() rule gets a chance to turn it back
+    // into a <br>, breaking exactly the invariant the table-cell tests above
+    // exist to protect, just for a cell whose content happens to be a link.
+    const md = htmlToMarkdown(
+      '<table><thead><tr><th>X</th></tr></thead><tbody>' +
+      '<tr><td><a href="http://x"><div>line one</div><div>line two</div></a></td></tr>' +
+      '</tbody></table>'
+    ).trim();
+
+    expect(md).toContain('| [line one<br>line two](http://x) |');
+    expect(md.split('\n').filter((l) => l.includes('line one'))).toHaveLength(1);
+  });
+
+  it('collapses a <br> to a space, not a newline, when the link is not in a table cell', () => {
+    // Preserving a newline is only safe inside a table cell (GFM's cell()
+    // rule is what turns it back into a <br>). An ATX heading and a list
+    // item both end at their own first newline, so keeping the newline here
+    // would truncate the construct mid-link and orphan the rest of the label
+    // as stray text below it. Confirmed against the bundled marked.min.js:
+    // a bare newline in these two shapes destroys the link outright.
+    const heading = htmlToMarkdown('<h3><a href="http://x">Big headline<br>the subtitle</a></h3>').trim();
+    expect(heading).toBe('### [Big headline the subtitle](http://x)');
+
+    const list = htmlToMarkdown('<a href="http://x"><ul><li>a</li><li>b</li></ul></a>').trim();
+    expect(list).toBe('[* a * b](http://x)');
+  });
+});
