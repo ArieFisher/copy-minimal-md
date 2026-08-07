@@ -196,12 +196,13 @@ describe('a link wrapping block-level children separates its fields, on one line
   });
 
   it('separates an image field from the text fields around it (news-card icon link)', () => {
-    // A favicon <img> alongside headline/timestamp divs — the shape this repo's
-    // own tests/fixtures/google-news-icon-link/ captures. Turndown converts the
-    // <img> to its own ![alt](src) field before this rule ever sees it, so it
-    // has to survive being one of the joined fields rather than being mistaken
-    // for the end of the link (a document-wide regex would stop matching at
-    // the image's own closing `](`, which is what this rule replaced).
+    // A favicon <img> alongside headline/timestamp divs — a common news-card
+    // link shape (distinct from tests/fixtures/google-news-icon-link/, whose
+    // icon is an inline <svg>, not an <img>). Turndown converts the <img> to
+    // its own ![alt](src) field before this rule ever sees it, so it has to
+    // survive being one of the joined fields rather than being mistaken for
+    // the end of the link (a document-wide regex would stop matching at the
+    // image's own closing `](`, which is what this rule replaced).
     const html =
       '<a href="https://u"><div><img src="f.png" alt="Reuters"></div>' +
       '<div>Headline text</div><div>8 hours ago</div></a>';
@@ -236,5 +237,23 @@ describe('a link wrapping block-level children separates its fields, on one line
     ).trim();
 
     expect(md).toBe('see \\[note\\] for detail\n\n[real link](http://x)');
+  });
+
+  it('keeps a table cell link on one row, break intact, when the cell had multiple divs', () => {
+    // inlineCellDivs (equivalents.js) already turns cell divs into
+    // <span><br><span> before Turndown ever runs, so a link wrapping them has
+    // no <div> boundary left to split on — just the <br>'s own newline
+    // sitting inside one field. Collapsing all whitespace to a space here
+    // would erase it before GFM's cell() rule gets a chance to turn it back
+    // into a <br>, breaking exactly the invariant the table-cell tests above
+    // exist to protect, just for a cell whose content happens to be a link.
+    const md = htmlToMarkdown(
+      '<table><thead><tr><th>X</th></tr></thead><tbody>' +
+      '<tr><td><a href="http://x"><div>line one</div><div>line two</div></a></td></tr>' +
+      '</tbody></table>'
+    ).trim();
+
+    expect(md).toContain('| [line one<br>line two](http://x) |');
+    expect(md.split('\n').filter((l) => l.includes('line one'))).toHaveLength(1);
   });
 });

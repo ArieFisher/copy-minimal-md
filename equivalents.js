@@ -612,21 +612,26 @@
         }
 
         // A link label can't safely hold a literal blank line (CommonMark link
-        // labels don't span one), so a link has to render on one line — but a
-        // blank-line pair is also Turndown's own signal that separate
-        // block-level elements (e.g. sibling <div>s) were nested inside the
-        // <a>, and losing that signal turns several fields into a run-on
-        // sentence with nothing marking where one ends and the next begins.
-        // This overrides the built-in link rule rather than post-processing
-        // Turndown's output with a regex: a regex matching `[...]` across the
-        // whole rendered document pairs the wrong brackets whenever the link
-        // text contains its own image (`![alt](src)` closes first) or whenever
-        // unrelated bracketed text sits earlier in the document — this rule
-        // only ever sees one anchor's own already-converted content, so
-        // there's nothing else for it to match against. Only the blank-line
-        // boundary is treated as a field break; a single <br> or other block
-        // markup (lists, headings, code fences) inside a link is unchanged
-        // from Turndown's default handling.
+        // labels don't span one), so a run of block-level elements nested
+        // inside the <a> (e.g. sibling <div>s) has to render on one line —
+        // but a blank-line pair is also Turndown's own signal that those were
+        // separate blocks, and losing that signal turns several fields into a
+        // run-on sentence with nothing marking where one ends and the next
+        // begins. This overrides the built-in link rule rather than
+        // post-processing Turndown's output with a regex: a regex matching
+        // `[...]` across the whole rendered document pairs the wrong brackets
+        // whenever the link text contains its own image (`![alt](src)`
+        // closes first) or whenever unrelated bracketed text sits earlier in
+        // the document — this rule only ever sees one anchor's own
+        // already-converted content, so there's nothing else for it to match
+        // against. Only a blank-line pair is a field break; any other
+        // newline that survives inside a field (a <br>, most often — table
+        // cells arrive pre-flattened to <span><br><span> by inlineCellDivs,
+        // so a link inside one has no <div> boundary left to split on, just
+        // this) is left as a single newline rather than collapsed to a space,
+        // since GFM's own cell() rule (turndown-plugin-gfm.js) still needs a
+        // real newline there to convert into the cell's <br>; only the
+        // horizontal whitespace around it is incidental padding.
         turndownService.addRule('separateLinkFields', {
             filter: (node, options) => (
                 options.linkStyle === 'inlined' &&
@@ -642,7 +647,7 @@
                 const fields = content
                     .trim()
                     .split(/\n\s*\n/)
-                    .map(field => field.replace(/\s+/g, ' ').trim());
+                    .map(field => field.replace(/[^\S\n]+/g, ' ').replace(/ ?\n ?/g, '\n').trim());
 
                 return `[${fields.join(' — ')}](${href}${title || ''})`;
             }
