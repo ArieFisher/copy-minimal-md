@@ -154,3 +154,44 @@ describe('multi-div cells degrade the lost break to <br>, not glued text', () =>
     expect(html).toContain('<td>line one<br>line two</td>');
   });
 });
+
+// A link whose content is itself block-level divs (a card pattern, e.g. a
+// Google Finance stock row: one <a> wrapping ticker/name/price/change divs)
+// can't keep those divs' block breaks as literal newlines — a Markdown link
+// label can't safely span a blank line. Before this fix, the whitespace
+// collapse in `toMarkdown` that trims incidental link-text padding couldn't
+// tell that padding apart from a real div boundary, and flattened both to a
+// single bare space: every field ran together with nothing marking where one
+// ended and the next began. It should now separate them with an em dash
+// while still keeping the whole label on one line.
+describe('a link wrapping block-level children separates its fields, on one line', () => {
+  const financeCardHtml =
+    '<a href="https://www.google.com/finance/beta/quote/AII:TSE">' +
+    '<div><div><div>AII</div><div>Almonty Industries Inc</div></div>' +
+    '<div><div>$15.51</div><div>-4.96%&nbsp;<div><i>arrow_downward</i></div></div></div>' +
+    '</div></a>';
+
+  it('joins the ticker, name, price, change and icon with em dashes on one line', () => {
+    const md = htmlToMarkdown(financeCardHtml).trim();
+
+    expect(md).toBe(
+      '[AII — Almonty Industries Inc — $15.51 — \\-4.96% — _arrow\\_downward_]' +
+      '(https://www.google.com/finance/beta/quote/AII:TSE)'
+    );
+    expect(md.split('\n')).toHaveLength(1);
+  });
+
+  it('leaves a link with a single inline-only child unchanged (no em dash introduced)', () => {
+    const md = htmlToMarkdown('<a href="https://example.com">Simple text</a>').trim();
+
+    expect(md).toBe('[Simple text](https://example.com)');
+    expect(md).not.toContain('—');
+  });
+
+  it('still collapses incidental whitespace (no real block boundary) to a single space', () => {
+    const md = htmlToMarkdown('<a href="https://example.com">\n  Simple\n  text\n</a>').trim();
+
+    expect(md).toBe('[Simple text](https://example.com)');
+    expect(md).not.toContain('—');
+  });
+});

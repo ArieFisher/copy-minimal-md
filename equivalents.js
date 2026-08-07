@@ -611,10 +611,24 @@
             turndownService.use(turndownPluginGfm.gfm);
         }
 
-        // Collapse the whitespace Turndown leaves inside link text.
+        // Collapse the whitespace Turndown leaves inside link text. A link label
+        // can't safely hold a literal blank line (CommonMark link labels don't
+        // span one), so this has to stay on one line — but a blank-line pair is
+        // also Turndown's own signal that separate block-level elements (e.g.
+        // sibling <div>s) were nested inside the <a>, and squashing that away
+        // with the same pass that trims incidental padding turns several fields
+        // into a run-on sentence with nothing marking where one ends and the
+        // next begins. Split on that signal first and rejoin with an em dash,
+        // then collapse whatever incidental whitespace is left in each piece.
         return turndownService.turndown(cleanHtml).replace(
             /\[([\s\S]+?)\]\((.*?)\)/g,
-            (m, innerText, href) => `[${innerText.trim().replace(/\s+/g, ' ')}](${href})`
+            (m, innerText, href) => {
+                const fields = innerText
+                    .trim()
+                    .split(/\n\s*\n/)
+                    .map(field => field.replace(/\s+/g, ' ').trim());
+                return `[${fields.join(' — ')}](${href})`;
+            }
         );
     }
 
