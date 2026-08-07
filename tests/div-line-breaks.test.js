@@ -256,4 +256,18 @@ describe('a link wrapping block-level children separates its fields, on one line
     expect(md).toContain('| [line one<br>line two](http://x) |');
     expect(md.split('\n').filter((l) => l.includes('line one'))).toHaveLength(1);
   });
+
+  it('collapses a <br> to a space, not a newline, when the link is not in a table cell', () => {
+    // Preserving a newline is only safe inside a table cell (GFM's cell()
+    // rule is what turns it back into a <br>). An ATX heading and a list
+    // item both end at their own first newline, so keeping the newline here
+    // would truncate the construct mid-link and orphan the rest of the label
+    // as stray text below it. Confirmed against the bundled marked.min.js:
+    // a bare newline in these two shapes destroys the link outright.
+    const heading = htmlToMarkdown('<h3><a href="http://x">Big headline<br>the subtitle</a></h3>').trim();
+    expect(heading).toBe('### [Big headline the subtitle](http://x)');
+
+    const list = htmlToMarkdown('<a href="http://x"><ul><li>a</li><li>b</li></ul></a>').trim();
+    expect(list).toBe('[* a * b](http://x)');
+  });
 });

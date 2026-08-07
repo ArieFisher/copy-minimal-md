@@ -624,14 +624,21 @@
         // closes first) or whenever unrelated bracketed text sits earlier in
         // the document — this rule only ever sees one anchor's own
         // already-converted content, so there's nothing else for it to match
-        // against. Only a blank-line pair is a field break; any other
-        // newline that survives inside a field (a <br>, most often — table
-        // cells arrive pre-flattened to <span><br><span> by inlineCellDivs,
-        // so a link inside one has no <div> boundary left to split on, just
-        // this) is left as a single newline rather than collapsed to a space,
-        // since GFM's own cell() rule (turndown-plugin-gfm.js) still needs a
-        // real newline there to convert into the cell's <br>; only the
-        // horizontal whitespace around it is incidental padding.
+        // against. Only a blank-line pair is a field break.
+        //
+        // A lone newline that survives inside a field (from a <br>, most
+        // often) is a narrower case: it's only safe to keep as a real newline
+        // inside a table cell, where GFM's own cell() rule
+        // (turndown-plugin-gfm.js) needs one there to convert it into the
+        // cell's <br> — table cells arrive pre-flattened to
+        // <span><br><span> by inlineCellDivs, so a link inside one has no
+        // <div> boundary left to split on, just that lone newline. Anywhere
+        // else, a link sits inside a construct that ends at its own first
+        // newline (an ATX heading, a list item), so a bare newline in the
+        // label truncates that construct and orphans the rest of the label as
+        // stray text below it — worse than losing the <br>, so outside a
+        // table cell a lone newline still collapses to a space like any other
+        // incidental whitespace.
         turndownService.addRule('separateLinkFields', {
             filter: (node, options) => (
                 options.linkStyle === 'inlined' &&
@@ -644,10 +651,13 @@
                 let title = node.getAttribute('title');
                 if (title) title = ' "' + title.replace(/(\n+\s*)+/g, '\n').replace(/"/g, '\\"') + '"';
 
+                const inTableCell = !!node.closest('td, th');
                 const fields = content
                     .trim()
                     .split(/\n\s*\n/)
-                    .map(field => field.replace(/[^\S\n]+/g, ' ').replace(/ ?\n ?/g, '\n').trim());
+                    .map(field => inTableCell
+                        ? field.replace(/[^\S\n]+/g, ' ').replace(/ ?\n ?/g, '\n').trim()
+                        : field.replace(/\s+/g, ' ').trim());
 
                 return `[${fields.join(' — ')}](${href}${title || ''})`;
             }
