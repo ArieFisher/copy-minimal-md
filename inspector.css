@@ -53,6 +53,19 @@
      writes it on the root element. Nothing else on the page reads it, which is
      the point — the chrome holds its size at every level. */
   --preview-zoom: 1;
+
+  /* How tall a pane may grow before it starts scrolling. These are the floor,
+     not the height: on a window with room to spare inspector.js raises them on
+     the grid, so the panes take the space before the zoom starts trading
+     legibility for it. How much each row gets follows what it is holding —
+     which is usually more for the HTML row, since clipboard markup runs far
+     longer than the thing it describes, but that is an outcome and not a rule.
+     The two cards in a row always share one number, so neither side strands.
+
+     They stay put outside the grid: what is under "Also on the clipboard" is a
+     diagnostic, and it does not get to push the comparison off the screen. */
+  --pane-cap: 200px;
+  --pane-cap-html: 300px;
 }
 
 body {
@@ -245,8 +258,8 @@ body {
 
 /* Every pane's payload hangs off one of these. The zoom goes here and not on
    the pane, because `zoom` scales an element's own specified lengths too: on
-   .card-render it would take the 200px cap with it, and the cards would grow
-   and shrink instead of showing more and less of what is in them. */
+   .card-render it would take that pane's own height cap with it, and the cards
+   would grow and shrink instead of showing more and less of what is in them. */
 .zoom-layer {
   zoom: var(--preview-zoom);
 }
@@ -489,7 +502,7 @@ body {
   padding: 16px 22px;
   font-size: 14px;
   line-height: 1.6;
-  max-height: 200px;
+  max-height: var(--pane-cap);
   overflow: auto;
   flex: 1;
 }
@@ -603,7 +616,7 @@ body {
   white-space: pre;
   color: var(--text-pre);
   background: var(--source-bg);
-  max-height: 200px;
+  max-height: var(--pane-cap);
   overflow: auto;
   flex: 1;
 }
@@ -638,7 +651,7 @@ body {
 .card--html .card-render,
 .card--simple-html .card-source,
 .card--simple-html .card-render {
-  max-height: 300px;
+  max-height: var(--pane-cap-html);
 }
 
 .card-empty {

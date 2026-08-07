@@ -492,11 +492,94 @@ test('re-fits when a pane starts wrapping', async ({ context, server, extensionI
     html: '<p>a short paragraph</p>',
   });
 
-  expect(await previewZoom(page)).toBe(1);
+  // On a window with room in it the panes would simply grow to take the new
+  // lines and the zoom would never move, which is the right answer there and
+  // no test of this one. Short enough that height has nothing left to give.
+  await page.setViewportSize({ width: 1280, height: 620 });
+  await expect.poll(() => previewZoom(page)).toBe(1);
 
   await page.locator('.card--plain .wrap-btn').click();
   await expect(page.locator('.card--plain .card-source')).toHaveClass(/is-wrapped/);
   expect(await previewZoom(page)).toBeLessThan(1);
+  expect(await panesStillScrolling(page)).toEqual([]);
+});
+
+/* ------------------------------------------------------- pane height budget */
+
+/** The cap a pane is currently allowed to grow to, in pixels. */
+function paneCap(page, selector) {
+  return page.locator(selector).evaluate((pane) => parseFloat(getComputedStyle(pane).maxHeight));
+}
+
+/** How far the grid's bottom edge sits above (positive) the fold. */
+function roomBelowGrid(page) {
+  return page.evaluate(() =>
+    window.innerHeight - document.querySelector('.inspector-grid').getBoundingClientRect().bottom);
+}
+
+test('the panes take the room a tall window leaves them', async ({ context, server, extensionId }) => {
+  // Endless on purpose: the panes want every pixel there is, so what they get
+  // is the budget and nothing about the payload.
+  const page = await inspectClipboard({ context, server, extensionId }, { ...ENDLESS_COPY });
+
+  await page.setViewportSize({ width: 1280, height: 700 });
+  // Never below the heights the stylesheet ships with, however little room
+  // there is: a short window is no worse off than it was before any of this.
+  await expect.poll(() => paneCap(page, '.card--html .card-render')).toBeGreaterThanOrEqual(300);
+  const short = {
+    html: await paneCap(page, '.card--html .card-render'),
+    rest: await paneCap(page, '.card--plain .card-source'),
+  };
+  expect(short.rest).toBeGreaterThanOrEqual(200);
+
+  // The same copy on a window with 800px more in it.
+  await page.setViewportSize({ width: 1280, height: 1500 });
+  await expect.poll(() => paneCap(page, '.card--html .card-render')).toBeGreaterThan(short.html + 100);
+  expect(await paneCap(page, '.card--plain .card-source')).toBeGreaterThan(short.rest + 100);
+
+  // Both cards in a row still share one cap — split them and the shorter side
+  // strands.
+  expect(await paneCap(page, '.card--simple-html .card-render'))
+    .toBe(await paneCap(page, '.card--html .card-render'));
+  expect(await paneCap(page, '.card--markdown .card-render'))
+    .toBe(await paneCap(page, '.card--plain .card-source'));
+});
+
+test('the panes fill the window without running past it', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, { ...ENDLESS_COPY });
+  await page.setViewportSize({ width: 1280, height: 1500 });
+  await expect.poll(() => paneCap(page, '.card--html .card-render')).toBeGreaterThan(300);
+
+  // Room taken, but not more than there was: the comparison still ends inside
+  // the window rather than sending the page itself scrolling.
+  const room = await roomBelowGrid(page);
+  expect(room).toBeGreaterThanOrEqual(0);
+  expect(room).toBeLessThan(80);
+});
+
+test('a stacked single column keeps the panes at their base height', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, { ...ENDLESS_COPY });
+
+  // One column means the two rows sit end to end, so there is no spare room to
+  // hand out — the page scrolls whatever the caps say, and taller panes would
+  // only make it scroll further.
+  await page.setViewportSize({ width: 700, height: 1500 });
+  await expect.poll(() => paneCap(page, '.card--html .card-render')).toBe(300);
+  expect(await paneCap(page, '.card--plain .card-source')).toBe(200);
+});
+
+test('room goes to the panes before the zoom starts shrinking', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
+
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await expect.poll(() => previewZoom(page)).toBeLessThan(1);
+
+  // The same copy, the same Fit, a window with room in it: the panes grow into
+  // it and the payload goes back to full size rather than being shrunk to suit
+  // a cap that did not have to be that small.
+  await page.setViewportSize({ width: 1280, height: 1500 });
+  await expect(page.locator('#zoom-value')).toHaveText('Fit');
+  await expect.poll(() => previewZoom(page)).toBe(1);
   expect(await panesStillScrolling(page)).toEqual([]);
 });
 

@@ -436,7 +436,10 @@ function render() {
     const extras = buildExtras();
     if (extras) container.appendChild(extras);
 
-    // Last, and after the panes are in the document: Fit has to measure them.
+    // Last, and after the panes are in the document, because both of these
+    // measure them: the room goes to the panes, then the zoom takes what the
+    // room could not cover.
+    fitPanesToWindow();
     applyZoom();
 }
 
@@ -857,6 +860,119 @@ function buildAriaBypassCard(ariaPreview) {
     return card;
 }
 
+/* ------------------------------------------------------- pane height budget */
+
+/**
+ * The two comparison rows, the variable each one's cap is written to, and the
+ * shortest its panes ever get — the caps the stylesheet ships with, and what a
+ * window with no room to spare leaves them at.
+ */
+const PANE_ROWS = [
+    { cards: ['.card--plain', '.card--markdown'], prop: '--pane-cap', base: 200 },
+    { cards: ['.card--html', '.card--simple-html'], prop: '--pane-cap-html', base: 300 },
+];
+
+/** Below this the grid is a single column, and there is no spare room to give. */
+const STACKED_COLUMNS = '(max-width: 860px)';
+
+/** The panes of one row, which is as tall as the taller of them. */
+function rowPanes(cards) {
+    return cards
+        .map(card => document.querySelector(`${card} .card-render, ${card} .card-source`))
+        .filter(Boolean);
+}
+
+/**
+ * What one row is asking for: the payload of its longer pane, and that pane's
+ * own padding, kept apart.
+ *
+ * They are kept apart because they behave differently under the zoom. Content
+ * scales; padding does not. Fold the padding into the figure that gets scaled
+ * down and the shorter row loses proportionally more of its cap to it, so that
+ * row binds first and the other one is left holding room it cannot use.
+ */
+function rowDemand(cards) {
+    let content = 0;
+    let pad = 0;
+    for (const pane of rowPanes(cards)) {
+        const layer = pane.querySelector('.zoom-layer');
+        if (!layer || layer.scrollHeight <= content) continue;
+        const box = getComputedStyle(pane);
+        content = layer.scrollHeight;
+        pad = parseFloat(box.paddingTop) + parseFloat(box.paddingBottom);
+    }
+    return { content, pad };
+}
+
+/**
+ * Give the panes the height the window is not using.
+ *
+ * Height and zoom buy the same thing — more of the payload in view — at very
+ * different prices. Height costs nothing; zoom pays in legibility. So the room
+ * goes to the panes first, and Fit is left to deal only with what is still
+ * over. On a tall window that often means Fit has nothing to do at all.
+ *
+ * The budget is what is left of the viewport once everything that is not a
+ * pane has been taken out. Rather than add up the headings, the card heads,
+ * the gaps and the padding, it measures them: the grid's height, less the
+ * height its two rows of panes are taking, is everything else — and that
+ * figure does not move when the caps do, so one pass settles.
+ *
+ * How the budget is split between the two rows follows what they are each
+ * asking for, and not a ratio fixed in advance. A fixed split binds on
+ * whichever row it shortchanges while the other keeps room it has nothing to
+ * put in — the panes stop growing with the window still half empty. Split it
+ * in proportion to need and both rows run out at the same moment, which is the
+ * split that leaves Fit its largest scale.
+ *
+ * Runs before every zoom, because Fit has to measure the caps this leaves.
+ */
+function fitPanesToWindow() {
+    const grid = document.querySelector('.inspector-grid');
+    if (!grid) return;
+
+    PANE_ROWS.forEach(row => grid.style.removeProperty(row.prop));
+    if (window.matchMedia(STACKED_COLUMNS).matches) return;
+
+    // Needs are what the payload asks for at full size; the zoom is the answer
+    // to them, so it must not be part of the question.
+    setPreviewZoom(1);
+
+    const rect = grid.getBoundingClientRect();
+    const paneHeight = PANE_ROWS.reduce((total, row) =>
+        total + Math.max(0, ...rowPanes(row.cards).map(p => p.getBoundingClientRect().height)), 0);
+    const chrome = rect.height - paneHeight;
+
+    // Document coordinates, so a scrolled page does not read as extra room.
+    const gridTop = rect.top + window.scrollY;
+    const extras = document.querySelector('.extras');
+    const budget = window.innerHeight - gridTop - chrome
+        - (extras ? extras.getBoundingClientRect().height : 0);
+
+    // Paddings come off the top — they are the same however far the payload is
+    // scaled — and what is left is shared out by payload alone. Both rows then
+    // run out at the same scale, and neither is left with room it cannot use.
+    const demands = PANE_ROWS.map(row => rowDemand(row.cards));
+    const payload = demands[0].content + demands[1].content;
+    const spare = budget - demands[0].pad - demands[1].pad;
+
+    PANE_ROWS.forEach((row, i) => {
+        // Room enough for all of it: the row takes what it asked for and
+        // nothing scrolls. Otherwise the two share the shortfall.
+        //
+        // What goes out is the payload's share alone. Nothing here sets
+        // box-sizing, so a max-height is the room for the content and the
+        // padding sits outside it — which is why the padding came off the
+        // budget above and must not be added back on here. Do both and every
+        // row spends its padding twice, and the grid runs past the fold by
+        // exactly that much.
+        const share = payload > spare && payload > 0
+            ? spare * demands[i].content / payload
+            : demands[i].content;
+        grid.style.setProperty(row.prop, `${Math.max(row.base, Math.ceil(share))}px`);
+    });
+}
+
 /* ----------------------------------------------------------- preview zoom */
 
 /** The ladder the menu offers, and what the keyboard shortcuts step through. */
@@ -891,42 +1007,52 @@ function everyPaneClears() {
  * separately would fit more in, but a row of this grid exists to be compared
  * against itself, and two panes drawn at different scales cannot be.
  *
- * Measured at 1, because a pane already scaled reports scaled numbers. The
- * pane's padding does not scale with the layer inside it, so it comes off the
- * available height before the ratio is taken.
+ * Searched rather than solved. Dividing the room by the payload looks like it
+ * should give the answer outright, and it is wrong in both directions: a
+ * scaled table row rounds up to a whole layout unit, so it lands a little
+ * past where the sum said, while a paragraph gains layout width as the layer
+ * shrinks and re-wraps into fewer lines, so it lands well short. That second
+ * one is the expensive mistake — it shrinks the payload further than it had
+ * to and leaves room standing empty. Half a dozen passes find the real answer
+ * either way.
  *
- * The arithmetic gives a first guess and not the answer: a scaled table row
- * rounds up to a whole layout unit, so ten of them land a few pixels past
- * where the ratio said they would and the pane scrolls after all. From the
- * guess it walks down a percent at a time until every pane clears.
+ * Never larger than life: Fit shows the whole payload, it does not enlarge one
+ * that already fits.
  *
  * Width is left alone. Long lines are the line-wrap toggle's job, one pane at
  * a time, and Fit does not touch it.
  */
 function computeFit() {
     setPreviewZoom(1);
+    if (everyPaneClears()) return 1;
 
-    let ratio = 1;
-    for (const layer of document.querySelectorAll('.zoom-layer')) {
-        const pane = layer.parentElement;
-        const box = getComputedStyle(pane);
-        const available = pane.clientHeight
-            - parseFloat(box.paddingTop) - parseFloat(box.paddingBottom);
-        const needed = layer.scrollHeight;
-        if (needed > available && available > 0) ratio = Math.min(ratio, available / needed);
+    // Percent points, so the answer is a round number the menu could name.
+    // `low` is the largest scale known to clear — or the floor, which stands
+    // whether it cleared or not, because past it the payload is not worth
+    // reading and scrolling is the better answer.
+    let low = ZOOM_FIT_FLOOR * 100;
+    let high = 100;
+
+    while (high - low > 1) {
+        const mid = Math.floor((low + high) / 2);
+        setPreviewZoom(mid / 100);
+        if (everyPaneClears()) low = mid; else high = mid;
+    }
+    setPreviewZoom(low / 100);
+
+    // Then confirm it, because a scale can clear on the way up and not on the
+    // way back down to it. A pane that has just taken a scrollbar is narrower
+    // by the width of one, so its text re-wraps into more lines and stands
+    // taller — which keeps the scrollbar. Both states hold at the same scale,
+    // and which one the page settles in depends on where it came from. Only
+    // the state it is left in counts, so give ground a point at a time until
+    // that one holds.
+    while (low > ZOOM_FIT_FLOOR * 100 && !everyPaneClears()) {
+        low -= 1;
+        setPreviewZoom(low / 100);
     }
 
-    // Never larger than life: Fit shows the whole payload, it does not enlarge
-    // one that already fits.
-    let scale = Math.max(ZOOM_FIT_FLOOR, Math.floor(Math.min(ratio, 1) * 100) / 100);
-    setPreviewZoom(scale);
-
-    for (let step = 0; step < 12 && scale > ZOOM_FIT_FLOOR && !everyPaneClears(); step++) {
-        scale = Math.max(ZOOM_FIT_FLOOR, Math.round(scale * 100 - 1) / 100);
-        setPreviewZoom(scale);
-    }
-
-    return scale;
+    return low / 100;
 }
 
 /**
@@ -1043,12 +1169,17 @@ function wireZoomControl() {
         }
     });
 
-    // A narrower window re-wraps the payload, which changes how tall it stands,
-    // which changes what Fit is.
+    // A resized window changes both halves of the answer: a taller one has
+    // more room to hand the panes, and a narrower one re-wraps the payload,
+    // which changes how tall it stands and so what Fit is.
     let pending = null;
     window.addEventListener('resize', () => {
-        if (state.zoom !== 'fit' || pending) return;
-        pending = requestAnimationFrame(() => { pending = null; applyZoom(); });
+        if (pending) return;
+        pending = requestAnimationFrame(() => {
+            pending = null;
+            fitPanesToWindow();
+            applyZoom();
+        });
     });
 }
 

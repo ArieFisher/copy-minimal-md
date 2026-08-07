@@ -1150,6 +1150,15 @@ ANZ	208,730	226,910	+8.7%</span></pre>
         </p>
       </div>
       <div class="note">
+        <h2>Height first, zoom second</h2>
+        <p>
+          Both buy the same thing; only one costs legibility. So the shipped version hands the
+          panes whatever height the window is not using — split between the two rows by what each
+          is holding — and Fit is left to deal with the remainder. On a tall window it has nothing
+          to do. This page keeps the old fixed heights, so the zoom does all the work here.
+        </p>
+      </div>
+      <div class="note">
         <h2>Built on an inner layer</h2>
         <p>
           <code>zoom</code> scales an element's own lengths too, so it goes on a layer inside each
@@ -1170,6 +1179,10 @@ ANZ	208,730	226,910	+8.7%</span></pre>
           for the rest.</li>
         <li><strong>Width is left to the wrap toggle.</strong> Fit measures height only. Long lines
           are a per-pane question, and the toggle in each card head already answers it.</li>
+        <li><strong>A pane grows before it shrinks its payload.</strong> The 200px and 300px caps
+          became a floor rather than a height: the panes take whatever the window is not using
+          first, and Fit only handles what is still over. Left as it is on this page, which keeps
+          the fixed caps so the zoom has something to do.</li>
       </ul>
     </div>
 
