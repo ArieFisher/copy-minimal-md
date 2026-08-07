@@ -194,4 +194,47 @@ describe('a link wrapping block-level children separates its fields, on one line
     expect(md).toBe('[Simple text](https://example.com)');
     expect(md).not.toContain('—');
   });
+
+  it('separates an image field from the text fields around it (news-card icon link)', () => {
+    // A favicon <img> alongside headline/timestamp divs — the shape this repo's
+    // own tests/fixtures/google-news-icon-link/ captures. Turndown converts the
+    // <img> to its own ![alt](src) field before this rule ever sees it, so it
+    // has to survive being one of the joined fields rather than being mistaken
+    // for the end of the link (a document-wide regex would stop matching at
+    // the image's own closing `](`, which is what this rule replaced).
+    const html =
+      '<a href="https://u"><div><img src="f.png" alt="Reuters"></div>' +
+      '<div>Headline text</div><div>8 hours ago</div></a>';
+    const md = htmlToMarkdown(html).trim();
+
+    expect(md).toBe('[![Reuters](f.png) — Headline text — 8 hours ago](https://u)');
+    expect(md.split('\n')).toHaveLength(1);
+  });
+
+  it('introduces no separator when the link wraps exactly one block-level child', () => {
+    const md = htmlToMarkdown('<a href="https://example.com"><div>only</div></a>').trim();
+
+    expect(md).toBe('[only](https://example.com)');
+    expect(md).not.toContain('—');
+  });
+
+  it('still finds the boundary when a block child sits between plain inline text', () => {
+    const md = htmlToMarkdown(
+      '<a href="https://example.com">lead text<div>block</div>trail text</a>'
+    ).trim();
+
+    expect(md).toBe('[lead text — block — trail text](https://example.com)');
+  });
+
+  it('does not let an unrelated bracket earlier in the document leak an em dash into a later link', () => {
+    // Regression guard for the old document-wide regex, which paired a stray
+    // "[" in prose with the next real link's "]" and glued the two paragraphs
+    // together. Scoping the rule to one anchor's own content means there is
+    // nothing else for it to match against.
+    const md = htmlToMarkdown(
+      '<p>see [note] for detail</p><p><a href="http://x">real link</a></p>'
+    ).trim();
+
+    expect(md).toBe('see \\[note\\] for detail\n\n[real link](http://x)');
+  });
 });

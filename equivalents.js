@@ -611,25 +611,44 @@
             turndownService.use(turndownPluginGfm.gfm);
         }
 
-        // Collapse the whitespace Turndown leaves inside link text. A link label
-        // can't safely hold a literal blank line (CommonMark link labels don't
-        // span one), so this has to stay on one line — but a blank-line pair is
-        // also Turndown's own signal that separate block-level elements (e.g.
-        // sibling <div>s) were nested inside the <a>, and squashing that away
-        // with the same pass that trims incidental padding turns several fields
-        // into a run-on sentence with nothing marking where one ends and the
-        // next begins. Split on that signal first and rejoin with an em dash,
-        // then collapse whatever incidental whitespace is left in each piece.
-        return turndownService.turndown(cleanHtml).replace(
-            /\[([\s\S]+?)\]\((.*?)\)/g,
-            (m, innerText, href) => {
-                const fields = innerText
+        // A link label can't safely hold a literal blank line (CommonMark link
+        // labels don't span one), so a link has to render on one line — but a
+        // blank-line pair is also Turndown's own signal that separate
+        // block-level elements (e.g. sibling <div>s) were nested inside the
+        // <a>, and losing that signal turns several fields into a run-on
+        // sentence with nothing marking where one ends and the next begins.
+        // This overrides the built-in link rule rather than post-processing
+        // Turndown's output with a regex: a regex matching `[...]` across the
+        // whole rendered document pairs the wrong brackets whenever the link
+        // text contains its own image (`![alt](src)` closes first) or whenever
+        // unrelated bracketed text sits earlier in the document — this rule
+        // only ever sees one anchor's own already-converted content, so
+        // there's nothing else for it to match against. Only the blank-line
+        // boundary is treated as a field break; a single <br> or other block
+        // markup (lists, headings, code fences) inside a link is unchanged
+        // from Turndown's default handling.
+        turndownService.addRule('separateLinkFields', {
+            filter: (node, options) => (
+                options.linkStyle === 'inlined' &&
+                node.nodeName === 'A' &&
+                node.getAttribute('href')
+            ),
+            replacement: (content, node) => {
+                let href = node.getAttribute('href');
+                if (href) href = href.replace(/([()])/g, '\\$1');
+                let title = node.getAttribute('title');
+                if (title) title = ' "' + title.replace(/(\n+\s*)+/g, '\n').replace(/"/g, '\\"') + '"';
+
+                const fields = content
                     .trim()
                     .split(/\n\s*\n/)
                     .map(field => field.replace(/\s+/g, ' ').trim());
-                return `[${fields.join(' — ')}](${href})`;
+
+                return `[${fields.join(' — ')}](${href}${title || ''})`;
             }
-        );
+        });
+
+        return turndownService.turndown(cleanHtml);
     }
 
     // Exported for pipeline.js, whose Markdown path does its own sanitize and
