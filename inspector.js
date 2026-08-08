@@ -975,9 +975,6 @@ function fitPanesToWindow() {
 
 /* ----------------------------------------------------------- preview zoom */
 
-/** The ladder the menu offers, and what the keyboard shortcuts step through. */
-const ZOOM_STEPS = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2];
-
 /**
  * Fit stops here. Below it the payload is no longer readable, and a pane that
  * cannot fit even at 50% goes back to doing what it always did — showing what
@@ -1079,17 +1076,6 @@ function setZoom(choice) {
     applyZoom();
 }
 
-/** Step to the next rung of the ladder from wherever the panes are drawn now. */
-function stepZoom(direction) {
-    const current = parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue('--preview-zoom')
-    ) || 1;
-    const next = direction > 0
-        ? ZOOM_STEPS.find(step => step > current + 0.001)
-        : [...ZOOM_STEPS].reverse().find(step => step < current - 0.001);
-    if (next !== undefined) setZoom(String(next));
-}
-
 function openZoomMenu() {
     zoomEls.menu.hidden = false;
     zoomEls.trigger.setAttribute('aria-expanded', 'true');
@@ -1140,32 +1126,19 @@ function wireZoomControl() {
         if (!zoomEls.menu.hidden && !event.target.closest('#zoom')) closeZoomMenu();
     });
 
+    // Only while the menu is open, and only keys the menu itself owns. The
+    // browser's own zoom shortcuts are left alone: cmd and plus or minus zoom
+    // the page, the way they do everywhere else.
     document.addEventListener('keydown', (event) => {
-        if (!zoomEls.menu.hidden) {
-            if (event.key === 'Escape') { closeZoomMenu(); zoomEls.trigger.focus(); return; }
-            if (event.key === 'ArrowDown') { event.preventDefault(); moveZoomCursor(1); return; }
-            if (event.key === 'ArrowUp') { event.preventDefault(); moveZoomCursor(-1); return; }
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                setZoom(zoomEls.options[zoomEls.cursor].dataset.zoom);
-                closeZoomMenu();
-                zoomEls.trigger.focus();
-                return;
-            }
-        }
-
-        // The editor shortcuts. This page has one thing worth resizing, so they
-        // are taken from the browser and pointed at the panes.
-        if (!(event.ctrlKey || event.metaKey)) return;
-        if (event.key === '=' || event.key === '+') {
+        if (zoomEls.menu.hidden) return;
+        if (event.key === 'Escape') { closeZoomMenu(); zoomEls.trigger.focus(); return; }
+        if (event.key === 'ArrowDown') { event.preventDefault(); moveZoomCursor(1); return; }
+        if (event.key === 'ArrowUp') { event.preventDefault(); moveZoomCursor(-1); return; }
+        if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            stepZoom(1);
-        } else if (event.key === '-') {
-            event.preventDefault();
-            stepZoom(-1);
-        } else if (event.key === '0') {
-            event.preventDefault();
-            setZoom('fit');
+            setZoom(zoomEls.options[zoomEls.cursor].dataset.zoom);
+            closeZoomMenu();
+            zoomEls.trigger.focus();
         }
     });
 

@@ -467,6 +467,24 @@ test('a level picked by hand replaces Fit, and Fit comes back', async ({ context
   expect(await panesStillScrolling(page)).toEqual([]);
 });
 
+test('leaves the browser its own zoom shortcuts', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
+  const before = await previewZoom(page);
+
+  // cmd or ctrl with plus, minus and 0 belong to the browser and zoom the page,
+  // the way they do everywhere else. Nothing here may take them: an unhandled
+  // key leaves the event uncancelled, which is what lets the browser act on it.
+  const prevented = await page.evaluate(() => ['=', '+', '-', '0'].map((key) => {
+    const event = new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    return event.defaultPrevented;
+  }));
+
+  expect(prevented).toEqual([false, false, false, false]);
+  expect(await previewZoom(page)).toBe(before);
+  await expect(page.locator('#zoom-value')).toHaveText('Fit');
+});
+
 test('re-fits when the view switches', async ({ context, server, extensionId }) => {
   const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
 
