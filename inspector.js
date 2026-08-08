@@ -59,6 +59,11 @@ function prettyPrintHtml(html, { uppercaseTags = false } = {}) {
 
 const state = {
     view: 'rendered',            // 'rendered' | 'source'
+    // How big the preview panes draw the payload: 'fit', or a scale like 1.25.
+    // Every inspect starts at Fit — a copy is worth seeing whole before it is
+    // worth reading, and the size that takes is a property of the copy, not
+    // something the user should have to ask for each time.
+    zoom: 'fit',
     // Per-pane line wrapping in the source view. Off by default: long lines run
     // off the edge and the pane scrolls, keeping the payload's real line
     // structure readable.
@@ -230,6 +235,10 @@ async function readClipboard() {
         state.mdDone = false;
         state.htmlDone = false;
         state.extras = extras;
+        // A different copy is a different inspect, and every inspect opens on
+        // the whole of what was copied. A level chosen for the payload that
+        // just left is not a level chosen for this one.
+        state.zoom = 'fit';
 
         let derived = null;
         try {
@@ -325,9 +334,33 @@ function buildWrapToggle(key) {
     return button;
 }
 
+/**
+ * Every pane hangs its payload off one of these, and the preview zoom scales
+ * the layer rather than the pane — see the note on .zoom-layer in the
+ * stylesheet for why the pane itself must not carry it.
+ *
+ * A <pre> may only contain phrasing content, so its layer is a <span> that the
+ * stylesheet makes a block.
+ */
+function buildZoomLayer(tag = 'div') {
+    return el(tag, 'zoom-layer');
+}
+
 /** A source <pre> that honours the pane's own wrap setting. */
 function buildSourcePre(key, text) {
-    return el('pre', state.wrap[key] ? 'card-source is-wrapped' : 'card-source', text);
+    const pre = el('pre', state.wrap[key] ? 'card-source is-wrapped' : 'card-source');
+    const layer = buildZoomLayer('span');
+    layer.textContent = text;
+    pre.appendChild(layer);
+    return pre;
+}
+
+/** A rendered pane, with its layer already in place. Returns both. */
+function buildRenderPane() {
+    const pane = el('div', 'card-render');
+    const layer = buildZoomLayer();
+    pane.appendChild(layer);
+    return { pane, layer };
 }
 
 /**
@@ -402,6 +435,12 @@ function render() {
 
     const extras = buildExtras();
     if (extras) container.appendChild(extras);
+
+    // Last, and after the panes are in the document, because both of these
+    // measure them: the room goes to the panes, then the zoom takes what the
+    // room could not cover.
+    fitPanesToWindow();
+    applyZoom();
 }
 
 function buildBanner() {
@@ -540,9 +579,9 @@ function buildHtmlCard() {
         const source = prettyPrintHtml(redactBase64(state.current.html), { uppercaseTags: true });
         card.appendChild(buildSourcePre('html', source || '[Empty String]'));
     } else {
-        const body = el('div', 'card-render');
-        renderHtmlInto(body, state.current.html, { keepStyles: true });
-        card.appendChild(body);
+        const { pane, layer } = buildRenderPane();
+        renderHtmlInto(layer, state.current.html, { keepStyles: true });
+        card.appendChild(pane);
     }
 
     return card;
@@ -611,13 +650,13 @@ function buildMarkdownCard() {
     if (state.view === 'source') {
         card.appendChild(buildSourcePre('markdown', state.equivalents.markdown));
     } else {
-        const body = el('div', 'card-render');
+        const { pane, layer } = buildRenderPane();
         if (typeof marked !== 'undefined') {
-            renderHtmlInto(body, marked.parse(state.equivalents.markdown, { breaks: true }));
+            renderHtmlInto(layer, marked.parse(state.equivalents.markdown, { breaks: true }));
         } else {
-            body.textContent = state.equivalents.markdown;
+            layer.textContent = state.equivalents.markdown;
         }
-        card.appendChild(body);
+        card.appendChild(pane);
     }
 
     return card;
@@ -644,9 +683,9 @@ function buildSimpleHtmlCard() {
     if (state.view === 'source') {
         card.appendChild(buildSourcePre('simpleHtml', prettyPrintHtml(state.equivalents.simpleHtml)));
     } else {
-        const body = el('div', 'card-render');
-        renderHtmlInto(body, state.equivalents.simpleHtml);
-        card.appendChild(body);
+        const { pane, layer } = buildRenderPane();
+        renderHtmlInto(layer, state.equivalents.simpleHtml);
+        card.appendChild(pane);
     }
 
     return card;
@@ -751,12 +790,12 @@ function buildExtraCard({ type, blob }) {
     card.appendChild(head);
 
     if (type.startsWith('image/')) {
-        const body = el('div', 'card-render');
+        const { pane, layer } = buildRenderPane();
         const img = document.createElement('img');
         img.src = URL.createObjectURL(blob);
         img.alt = `Clipboard image (${type})`;
-        body.appendChild(img);
-        card.appendChild(body);
+        layer.appendChild(img);
+        card.appendChild(pane);
     } else {
         card.appendChild(el('div', 'card-empty', 'No preview available for this type.'));
     }
@@ -791,13 +830,13 @@ function buildAriaBypassCard(ariaPreview) {
     if (state.view === 'source') {
         card.appendChild(buildSourcePre('aria', markdown || '[Empty]'));
     } else {
-        const body = el('div', 'card-render');
+        const { pane, layer } = buildRenderPane();
         if (typeof marked !== 'undefined') {
-            renderHtmlInto(body, marked.parse(markdown, { breaks: true }));
+            renderHtmlInto(layer, marked.parse(markdown, { breaks: true }));
         } else {
-            body.textContent = markdown;
+            layer.textContent = markdown;
         }
-        card.appendChild(body);
+        card.appendChild(pane);
     }
 
     const foot = el('div', 'card-foot');
@@ -819,6 +858,306 @@ function buildAriaBypassCard(ariaPreview) {
     card.appendChild(foot);
 
     return card;
+}
+
+/* ------------------------------------------------------- pane height budget */
+
+/**
+ * The two comparison rows, the variable each one's cap is written to, and the
+ * shortest its panes ever get — the caps the stylesheet ships with, and what a
+ * window with no room to spare leaves them at.
+ */
+const PANE_ROWS = [
+    { cards: ['.card--plain', '.card--markdown'], prop: '--pane-cap', base: 200 },
+    { cards: ['.card--html', '.card--simple-html'], prop: '--pane-cap-html', base: 300 },
+];
+
+/** Below this the grid is a single column, and there is no spare room to give. */
+const STACKED_COLUMNS = '(max-width: 860px)';
+
+/** The panes of one row, which is as tall as the taller of them. */
+function rowPanes(cards) {
+    return cards
+        .map(card => document.querySelector(`${card} .card-render, ${card} .card-source`))
+        .filter(Boolean);
+}
+
+/**
+ * What one row is asking for: the payload of its longer pane, and that pane's
+ * own padding, kept apart.
+ *
+ * They are kept apart because they behave differently under the zoom. Content
+ * scales; padding does not. Fold the padding into the figure that gets scaled
+ * down and the shorter row loses proportionally more of its cap to it, so that
+ * row binds first and the other one is left holding room it cannot use.
+ */
+function rowDemand(cards) {
+    let content = 0;
+    let pad = 0;
+    for (const pane of rowPanes(cards)) {
+        const layer = pane.querySelector('.zoom-layer');
+        if (!layer || layer.scrollHeight <= content) continue;
+        const box = getComputedStyle(pane);
+        content = layer.scrollHeight;
+        pad = parseFloat(box.paddingTop) + parseFloat(box.paddingBottom);
+    }
+    return { content, pad };
+}
+
+/**
+ * Give the panes the height the window is not using.
+ *
+ * Height and zoom buy the same thing — more of the payload in view — at very
+ * different prices. Height costs nothing; zoom pays in legibility. So the room
+ * goes to the panes first, and Fit is left to deal only with what is still
+ * over. On a tall window that often means Fit has nothing to do at all.
+ *
+ * The budget is what is left of the viewport once everything that is not a
+ * pane has been taken out. Rather than add up the headings, the card heads,
+ * the gaps and the padding, it measures them: the grid's height, less the
+ * height its two rows of panes are taking, is everything else — and that
+ * figure does not move when the caps do, so one pass settles.
+ *
+ * How the budget is split between the two rows follows what they are each
+ * asking for, and not a ratio fixed in advance. A fixed split binds on
+ * whichever row it shortchanges while the other keeps room it has nothing to
+ * put in — the panes stop growing with the window still half empty. Split it
+ * in proportion to need and both rows run out at the same moment, which is the
+ * split that leaves Fit its largest scale.
+ *
+ * Runs before every zoom, because Fit has to measure the caps this leaves.
+ */
+function fitPanesToWindow() {
+    const grid = document.querySelector('.inspector-grid');
+    if (!grid) return;
+
+    PANE_ROWS.forEach(row => grid.style.removeProperty(row.prop));
+    if (window.matchMedia(STACKED_COLUMNS).matches) return;
+
+    // Needs are what the payload asks for at full size; the zoom is the answer
+    // to them, so it must not be part of the question.
+    setPreviewZoom(1);
+
+    const rect = grid.getBoundingClientRect();
+    const paneHeight = PANE_ROWS.reduce((total, row) =>
+        total + Math.max(0, ...rowPanes(row.cards).map(p => p.getBoundingClientRect().height)), 0);
+    const chrome = rect.height - paneHeight;
+
+    // Document coordinates, so a scrolled page does not read as extra room.
+    const gridTop = rect.top + window.scrollY;
+    const extras = document.querySelector('.extras');
+    const budget = window.innerHeight - gridTop - chrome
+        - (extras ? extras.getBoundingClientRect().height : 0);
+
+    // Paddings come off the top — they are the same however far the payload is
+    // scaled — and what is left is shared out by payload alone. Both rows then
+    // run out at the same scale, and neither is left with room it cannot use.
+    const demands = PANE_ROWS.map(row => rowDemand(row.cards));
+    const payload = demands[0].content + demands[1].content;
+    const spare = budget - demands[0].pad - demands[1].pad;
+
+    PANE_ROWS.forEach((row, i) => {
+        // Room enough for all of it: the row takes what it asked for and
+        // nothing scrolls. Otherwise the two share the shortfall.
+        //
+        // What goes out is the payload's share alone. Nothing here sets
+        // box-sizing, so a max-height is the room for the content and the
+        // padding sits outside it — which is why the padding came off the
+        // budget above and must not be added back on here. Do both and every
+        // row spends its padding twice, and the grid runs past the fold by
+        // exactly that much.
+        const share = payload > spare && payload > 0
+            ? spare * demands[i].content / payload
+            : demands[i].content;
+        grid.style.setProperty(row.prop, `${Math.max(row.base, Math.ceil(share))}px`);
+    });
+}
+
+/* ----------------------------------------------------------- preview zoom */
+
+/**
+ * Fit stops here, and the menu offers the same figure as its smallest step.
+ *
+ * A quarter size is past reading and into looking: the words are gone, but the
+ * shape of the payload — how many rows, how deep the nesting, where the table
+ * ends — is all still there, and that is what the comparison is for. Below it
+ * even that goes, so a pane that cannot fit at 25% does what it always did:
+ * shows what it can and scrolls for the rest.
+ */
+const ZOOM_FIT_FLOOR = 0.25;
+
+const zoomEls = {};   // filled in at DOMContentLoaded
+
+function setPreviewZoom(scale) {
+    document.documentElement.style.setProperty('--preview-zoom', String(scale));
+}
+
+/** True when no pane is still holding content past its cap. */
+function everyPaneClears() {
+    for (const layer of document.querySelectorAll('.zoom-layer')) {
+        const pane = layer.parentElement;
+        if (pane.scrollHeight - pane.clientHeight > 1) return false;
+    }
+    return true;
+}
+
+/**
+ * Fit: the largest scale at which every pane's content clears its own cap.
+ *
+ * One scale for the whole page, not one per pane. Packing each pane
+ * separately would fit more in, but a row of this grid exists to be compared
+ * against itself, and two panes drawn at different scales cannot be.
+ *
+ * Searched rather than solved. Dividing the room by the payload looks like it
+ * should give the answer outright, and it is wrong in both directions: a
+ * scaled table row rounds up to a whole layout unit, so it lands a little
+ * past where the sum said, while a paragraph gains layout width as the layer
+ * shrinks and re-wraps into fewer lines, so it lands well short. That second
+ * one is the expensive mistake — it shrinks the payload further than it had
+ * to and leaves room standing empty. Half a dozen passes find the real answer
+ * either way.
+ *
+ * Never larger than life: Fit shows the whole payload, it does not enlarge one
+ * that already fits.
+ *
+ * Width is left alone. Long lines are the line-wrap toggle's job, one pane at
+ * a time, and Fit does not touch it.
+ */
+function computeFit() {
+    setPreviewZoom(1);
+    if (everyPaneClears()) return 1;
+
+    // Percent points, so the answer is a round number the menu could name.
+    // `low` is the largest scale known to clear — or the floor, which stands
+    // whether it cleared or not, because past it the payload is not worth
+    // reading and scrolling is the better answer.
+    let low = ZOOM_FIT_FLOOR * 100;
+    let high = 100;
+
+    while (high - low > 1) {
+        const mid = Math.floor((low + high) / 2);
+        setPreviewZoom(mid / 100);
+        if (everyPaneClears()) low = mid; else high = mid;
+    }
+    setPreviewZoom(low / 100);
+
+    // Then confirm it, because a scale can clear on the way up and not on the
+    // way back down to it. A pane that has just taken a scrollbar is narrower
+    // by the width of one, so its text re-wraps into more lines and stands
+    // taller — which keeps the scrollbar. Both states hold at the same scale,
+    // and which one the page settles in depends on where it came from. Only
+    // the state it is left in counts, so give ground a point at a time until
+    // that one holds.
+    while (low > ZOOM_FIT_FLOOR * 100 && !everyPaneClears()) {
+        low -= 1;
+        setPreviewZoom(low / 100);
+    }
+
+    return low / 100;
+}
+
+/**
+ * Put the current choice on the page. Fit is recomputed here rather than
+ * remembered: render() has just rebuilt the panes it was measured against, and
+ * a wrap toggle or a view switch changes how tall the same payload stands.
+ */
+function applyZoom() {
+    const isFit = state.zoom === 'fit';
+    setPreviewZoom(isFit ? computeFit() : state.zoom);
+
+    if (!zoomEls.trigger) return;
+    zoomEls.value.textContent = isFit ? 'Fit' : `${Math.round(state.zoom * 100)}%`;
+    zoomEls.trigger.classList.toggle('is-fit', isFit);
+
+    const selected = isFit ? 'fit' : String(state.zoom);
+    zoomEls.options.forEach(option => {
+        option.setAttribute('aria-selected', String(option.dataset.zoom === selected));
+    });
+}
+
+function setZoom(choice) {
+    state.zoom = choice === 'fit' ? 'fit' : parseFloat(choice);
+    applyZoom();
+}
+
+function openZoomMenu() {
+    zoomEls.menu.hidden = false;
+    zoomEls.trigger.setAttribute('aria-expanded', 'true');
+    zoomEls.cursor = Math.max(0, zoomEls.options.findIndex(o => o.getAttribute('aria-selected') === 'true'));
+    markZoomCursor();
+}
+
+function closeZoomMenu() {
+    zoomEls.menu.hidden = true;
+    zoomEls.trigger.setAttribute('aria-expanded', 'false');
+    zoomEls.trigger.removeAttribute('aria-activedescendant');
+    zoomEls.options.forEach(option => option.classList.remove('is-cursor'));
+}
+
+/** The keyboard's own place in the menu, which is not the selected option. */
+function markZoomCursor() {
+    zoomEls.options.forEach((option, i) => option.classList.toggle('is-cursor', i === zoomEls.cursor));
+    const option = zoomEls.options[zoomEls.cursor];
+    zoomEls.trigger.setAttribute('aria-activedescendant', option.id);
+    option.scrollIntoView({ block: 'nearest' });
+}
+
+function moveZoomCursor(delta) {
+    zoomEls.cursor = (zoomEls.cursor + delta + zoomEls.options.length) % zoomEls.options.length;
+    markZoomCursor();
+}
+
+function wireZoomControl() {
+    zoomEls.trigger = document.getElementById('zoom-trigger');
+    zoomEls.value = document.getElementById('zoom-value');
+    zoomEls.menu = document.getElementById('zoom-menu');
+    zoomEls.options = [...zoomEls.menu.querySelectorAll('.zoom-option')];
+    zoomEls.cursor = 0;
+
+    zoomEls.trigger.addEventListener('click', () => {
+        zoomEls.menu.hidden ? openZoomMenu() : closeZoomMenu();
+    });
+
+    zoomEls.menu.addEventListener('click', (event) => {
+        const option = event.target.closest('.zoom-option');
+        if (!option) return;
+        setZoom(option.dataset.zoom);
+        closeZoomMenu();
+        zoomEls.trigger.focus();
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!zoomEls.menu.hidden && !event.target.closest('#zoom')) closeZoomMenu();
+    });
+
+    // Only while the menu is open, and only keys the menu itself owns. The
+    // browser's own zoom shortcuts are left alone: cmd and plus or minus zoom
+    // the page, the way they do everywhere else.
+    document.addEventListener('keydown', (event) => {
+        if (zoomEls.menu.hidden) return;
+        if (event.key === 'Escape') { closeZoomMenu(); zoomEls.trigger.focus(); return; }
+        if (event.key === 'ArrowDown') { event.preventDefault(); moveZoomCursor(1); return; }
+        if (event.key === 'ArrowUp') { event.preventDefault(); moveZoomCursor(-1); return; }
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setZoom(zoomEls.options[zoomEls.cursor].dataset.zoom);
+            closeZoomMenu();
+            zoomEls.trigger.focus();
+        }
+    });
+
+    // A resized window changes both halves of the answer: a taller one has
+    // more room to hand the panes, and a narrower one re-wraps the payload,
+    // which changes how tall it stands and so what Fit is.
+    let pending = null;
+    window.addEventListener('resize', () => {
+        if (pending) return;
+        pending = requestAnimationFrame(() => {
+            pending = null;
+            fitPanesToWindow();
+            applyZoom();
+        });
+    });
 }
 
 /* ----------------------------------------------------------------- wiring */
@@ -844,6 +1183,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('#view-toggle .segment').forEach(btn => {
         btn.addEventListener('click', () => setView(btn.dataset.view));
     });
+
+    wireZoomControl();
 
     if (document.hasFocus()) {
         readClipboard();

@@ -160,8 +160,19 @@ lands on.
 
 So, in a pull request body:
 
-- Name tags bare — `div`, `figure`, `img` — and say in one line why they are
-  written that way, so the next reader does not think it a typo.
+- Name tags bare — `div`, `figure`, `img` — and leave it there. Do not add a
+  line explaining why they are written that way. Never write anything like:
+
+  > Tag names above are written bare, without angle brackets, because anything
+  > shaped like a tag is stripped from a pull request body.
+
+  That sentence, and every variant of it, is housekeeping for the writer. The
+  reader came for the change and is handed a note about the limits of the form
+  it is described in — which tells them nothing about the code and reads as an
+  apology for the medium. The same goes for every other aside of that kind: no
+  remarks about what would not survive the body, what had to be worded around,
+  or what the reader should picture instead. Write as though the constraint
+  were not there.
 - Do not write an image reference at all. Say "a Markdown image reference to
   `url`" in words. The literal cannot survive, and unlike a missing tag it will
   not look missing.
