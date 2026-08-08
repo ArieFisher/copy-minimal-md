@@ -345,7 +345,7 @@ function tableCopy(rows) {
  *  floor — so Fit is doing the arithmetic and not just bottoming out. */
 const TALL_COPY = tableCopy(10);
 
-/** Past what 50% can rescue. The floor holds and the pane scrolls, the way it
+/** Past what the floor can rescue. It holds, and the pane scrolls, the way it
  *  did before there was a zoom at all. */
 const ENDLESS_COPY = tableCopy(40);
 
@@ -407,15 +407,29 @@ test('opens at Fit, with the whole payload inside the panes', async ({ context, 
   expect((await panesStillScrolling(page)).length).toBeGreaterThan(0);
 });
 
-test('Fit stops at 50% rather than shrink a payload out of legibility', async ({ context, server, extensionId }) => {
+test('Fit stops at 25% rather than shrink a payload out of all legibility', async ({ context, server, extensionId }) => {
   const page = await inspectClipboard({ context, server, extensionId }, { ...ENDLESS_COPY });
+  // Deliberate: a window with room in it would hand the panes height instead,
+  // and the floor is about the case where there is none to hand.
+  await page.setViewportSize({ width: 1280, height: 700 });
 
-  // Some copies cannot be seen whole at any size worth reading. Fit goes as far
-  // as the floor and no further, and what is left over scrolls — which is what
-  // the pane did before there was a zoom at all.
+  // Some copies cannot be seen whole at any size worth looking at. Fit goes as
+  // far as the floor and no further, and what is left over scrolls — which is
+  // what the pane did before there was a zoom at all.
   await expect(page.locator('#zoom-value')).toHaveText('Fit');
-  expect(await previewZoom(page)).toBe(0.5);
+  await expect.poll(() => previewZoom(page)).toBe(0.25);
   expect((await panesStillScrolling(page)).length).toBeGreaterThan(0);
+});
+
+test('the menu offers the floor as a step of its own', async ({ context, server, extensionId }) => {
+  // Fit reaches 25% only when it has to. The menu offers it outright, for
+  // looking at the shape of something long without arguing with the window.
+  const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
+
+  await pickZoom(page, '0.25');
+  await expect(page.locator('#zoom-value')).toHaveText('25%');
+  expect(await previewZoom(page)).toBe(0.25);
+  expect(await panesStillScrolling(page)).toEqual([]);
 });
 
 test('Fit does not enlarge a payload that already fits', async ({ context, server, extensionId }) => {

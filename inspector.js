@@ -976,11 +976,15 @@ function fitPanesToWindow() {
 /* ----------------------------------------------------------- preview zoom */
 
 /**
- * Fit stops here. Below it the payload is no longer readable, and a pane that
- * cannot fit even at 50% goes back to doing what it always did — showing what
- * it can and scrolling for the rest.
+ * Fit stops here, and the menu offers the same figure as its smallest step.
+ *
+ * A quarter size is past reading and into looking: the words are gone, but the
+ * shape of the payload — how many rows, how deep the nesting, where the table
+ * ends — is all still there, and that is what the comparison is for. Below it
+ * even that goes, so a pane that cannot fit at 25% does what it always did:
+ * shows what it can and scrolls for the rest.
  */
-const ZOOM_FIT_FLOOR = 0.5;
+const ZOOM_FIT_FLOOR = 0.25;
 
 const zoomEls = {};   // filled in at DOMContentLoaded
 
