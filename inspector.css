@@ -232,6 +232,9 @@ body {
   white-space: nowrap;
 }
 
+/* The three rules below dress a row that is not currently in the menu, and the
+   trigger face that goes with it — see the note in inspector.html. Kept so the
+   row can be restored by its markup alone. */
 .zoom-option--fit {
   font-family: var(--font-serif);
   font-size: 14px;

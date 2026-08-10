@@ -1081,7 +1081,10 @@ function computeFit() {
  * nobody picked should be one of the ones they could have picked, so the two
  * figures the band is built from are the two it can settle on, and the opening
  * state is an ordinary choice from the menu rather than a mode with its own
- * rules. Fit is still there, still exact, one step up the list.
+ * rules.
+ *
+ * This is the only caller of computeFit while the Fit row is out of the menu,
+ * and the reason the search is still here to be called.
  *
  * A tie goes down. Half way between the two, the smaller shows more of the
  * copy, which is what the first look is for.
@@ -1095,16 +1098,20 @@ function openingZoom(fit) {
  * remembered: render() has just rebuilt the panes it was measured against, and
  * a wrap toggle or a view switch changes how tall the same payload stands.
  *
- * It is computed whether or not it is the current choice, because the menu
- * names the figure it would give. That costs a search the page would otherwise
- * have skipped, and buys a menu that says what it does before it is picked
- * rather than after.
+ * The search runs only when something is waiting on the figure — the opening
+ * level, which rounds it, or Fit itself standing as the choice. It costs half a
+ * dozen layout passes, and a level picked by hand needs none of them.
+ *
+ * The 'fit' branches below are unreachable from the interface while the Fit row
+ * is out of the menu. They are kept because the row is expected back, and a
+ * control that cannot be restored by putting its markup back is not one that was
+ * taken out cleanly.
  */
 function applyZoom() {
-    const fit = computeFit();
+    const isFit = state.zoom === 'fit';
+    const fit = isFit || state.zoom === 'auto' ? computeFit() : null;
     if (state.zoom === 'auto') state.zoom = openingZoom(fit);
 
-    const isFit = state.zoom === 'fit';
     // computeFit leaves the panes at the scale it found, which is the answer
     // only when Fit is the choice. Otherwise it is scaffolding, and the real
     // choice goes on after it.
@@ -1113,7 +1120,8 @@ function applyZoom() {
     if (!zoomEls.trigger) return;
     zoomEls.value.textContent = isFit ? 'Fit' : `${Math.round(state.zoom * 100)}%`;
     zoomEls.trigger.classList.toggle('is-fit', isFit);
-    zoomEls.fitPct.textContent = `(${Math.round(fit * 100)}%)`;
+    // Absent with the row, and null whenever nothing asked for the figure.
+    if (zoomEls.fitPct && fit !== null) zoomEls.fitPct.textContent = `(${Math.round(fit * 100)}%)`;
 
     const selected = isFit ? 'fit' : String(state.zoom);
     zoomEls.options.forEach(option => {

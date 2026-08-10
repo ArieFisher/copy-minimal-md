@@ -368,11 +368,20 @@ async function pickZoom(page, value) {
   await page.locator(`.zoom-option[data-zoom="${value}"]`).click();
 }
 
-/** The figure the menu says Fit would give, as a scale. */
-async function advertisedFit(page) {
-  const label = await page.locator('#zoom-fit-pct').textContent();
-  expect(label).toMatch(/^\(\d+%\)$/);
-  return parseInt(label.slice(1, -2), 10) / 100;
+/**
+ * Put the page into Fit, reaching past the interface to do it.
+ *
+ * The Fit row is out of the menu, so nothing a user can click arrives here any
+ * more. The code behind it is kept on purpose, against the row coming back, and
+ * code kept for later is code nothing exercises unless a test goes and calls it.
+ * That is what these are for: they are not a claim that anyone can get here, and
+ * they will start failing the moment the retained branches stop working.
+ *
+ * inspector.js is a classic script, so its function declarations are on the
+ * global object.
+ */
+async function forceFit(page) {
+  await page.evaluate(() => setZoom('fit'));
 }
 
 /**
@@ -400,29 +409,31 @@ function boxes(page) {
   });
 }
 
-test('opens on the step nearest what Fit would have given', async ({ context, server, extensionId }) => {
+test('the menu offers levels only, with no Fit row among them', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
+
+  await page.locator('#zoom-trigger').click();
+  await expect(page.locator('#zoom-opt-fit')).toHaveCount(0);
+  await expect(page.locator('.zoom-option')).toHaveText(['25%', '50%', '75%', '90%', '100%', '125%', '150%']);
+
+  // Whatever the page opened on is one of them, named the same way. Fit as a
+  // mode is gone from the interface; the arithmetic behind it is not, and the
+  // tests below are what still hold it.
+  await expect(page.locator('#zoom-value')).toHaveText(/^\d+%$/);
+});
+
+test('opens on a step from the menu, not on a figure of its own', async ({ context, server, extensionId }) => {
   const page = await inspectClipboard({ context, server, extensionId }, {
     ...TALL_COPY,
   });
 
-  // The menu names what Fit would give before it is picked. Strictly inside the
-  // band, so it is a figure Fit worked out and not either end of the range it
-  // is allowed to answer with — which is what leaves the rounding below
-  // something to do.
-  const fit = await advertisedFit(page);
-  expect(fit).toBeGreaterThan(0.5);
-  expect(fit).toBeLessThan(0.75);
-
-  // And the page opens on whichever end of the band that came out nearer, as an
-  // ordinary level rather than as Fit.
-  const nearest = fit - 0.5 <= 0.75 - fit ? 0.5 : 0.75;
-  await expect(page.locator('#zoom-value')).toHaveText(`${nearest * 100}%`);
-  expect(await previewZoom(page)).toBe(nearest);
-
-  // Fit is still exact when it is asked for.
-  await pickZoom(page, 'fit');
-  await expect(page.locator('#zoom-value')).toHaveText('Fit');
-  expect(await previewZoom(page)).toBe(fit);
+  // This payload needs shrinking, and needs it by an amount that falls between
+  // the two ends of the band — so the level it opens on is one Fit worked out
+  // and then rounded, not one end standing in for an answer.
+  const opened = await previewZoom(page);
+  expect([0.5, 0.75]).toContain(opened);
+  await expect(page.locator('#zoom-value')).toHaveText(`${opened * 100}%`);
+  await expect(page.locator(`.zoom-option[data-zoom="${opened}"]`)).toHaveAttribute('aria-selected', 'true');
   expect(await panesStillScrolling(page)).toEqual([]);
 
   // …and the payload is one that would not have fitted on its own, which is
@@ -431,28 +442,22 @@ test('opens on the step nearest what Fit would have given', async ({ context, se
   expect((await panesStillScrolling(page)).length).toBeGreaterThan(0);
 });
 
-test('Fit stops at 50% rather than shrink a payload out of all legibility', async ({ context, server, extensionId }) => {
+test('opens at 50% for a copy that cannot be fitted above the floor', async ({ context, server, extensionId }) => {
   const page = await inspectClipboard({ context, server, extensionId }, { ...ENDLESS_COPY });
-  // Deliberate: a window with room in it would hand the panes height instead,
-  // and the floor is about the case where there is none to hand.
-  await page.setViewportSize({ width: 1280, height: 700 });
 
-  // Some copies cannot be seen whole at any size worth looking at. Fit goes as
-  // far as the floor and no further, and what is left over scrolls — which is
-  // what the pane did before there was a zoom at all. The menu says so before
-  // it is picked.
-  await expect.poll(() => advertisedFit(page)).toBe(0.5);
-
-  await pickZoom(page, 'fit');
-  await expect(page.locator('#zoom-value')).toHaveText('Fit');
-  expect(await previewZoom(page)).toBe(0.5);
+  // Some copies cannot be seen whole at any size worth looking at. The
+  // arithmetic bottoms out at the floor, the floor is the nearer end of the
+  // band to itself, and what is left over scrolls — which is what the pane did
+  // before there was a zoom at all.
+  await expect.poll(() => previewZoom(page)).toBe(0.5);
+  await expect(page.locator('#zoom-value')).toHaveText('50%');
   expect((await panesStillScrolling(page)).length).toBeGreaterThan(0);
 });
 
-test('the menu goes below where Fit will', async ({ context, server, extensionId }) => {
-  // Fit will not shrink a payload past half size on its own. Asked outright it
-  // will, for looking at the shape of something long without arguing with the
-  // window — the floor is a default, not a limit.
+test('the menu goes below where a copy will ever open', async ({ context, server, extensionId }) => {
+  // Nothing opens below half size. Asked outright the menu will go lower, for
+  // looking at the shape of something long without arguing with the window —
+  // the floor is a default, not a limit.
   const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
 
   await pickZoom(page, '0.25');
@@ -467,9 +472,9 @@ test('a payload that would clear at full size still opens at 75%', async ({ cont
     html: '<h1>Heading</h1><p>some <b>text</b></p>',
   });
 
-  // Small enough to clear at full size with room to spare, so Fit comes back at
-  // the ceiling and the nearer end of the band is the ceiling too.
-  await expect.poll(() => advertisedFit(page)).toBe(0.75);
+  // Small enough to clear at full size with room to spare, so the arithmetic
+  // comes back at the ceiling and the nearer end of the band is the ceiling too.
+  await expect.poll(() => previewZoom(page)).toBe(0.75);
   await expect(page.locator('#zoom-value')).toHaveText('75%');
   expect(await previewZoom(page)).toBe(0.75);
   expect(await panesStillScrolling(page)).toEqual([]);
@@ -501,28 +506,26 @@ test('the chrome holds its size while the payload scales', async ({ context, ser
   }
 });
 
-test('a level picked by hand replaces Fit, and Fit comes back', async ({ context, server, extensionId }) => {
+test('a level picked by hand replaces the one the copy opened on', async ({ context, server, extensionId }) => {
   const page = await inspectClipboard({ context, server, extensionId }, {
     ...TALL_COPY,
   });
+  const opened = await previewZoom(page);
 
   await pickZoom(page, '1.25');
   await expect(page.locator('#zoom-value')).toHaveText('125%');
   expect(await previewZoom(page)).toBe(1.25);
+  expect(await previewZoom(page)).not.toBe(opened);
   await expect(page.locator('.zoom-option[data-zoom="1.25"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator(`.zoom-option[data-zoom="${opened}"]`)).toHaveAttribute('aria-selected', 'false');
 
   // The menu shuts behind the choice, and Escape is not needed to prove it.
   await expect(page.locator('#zoom-menu')).toBeHidden();
-
-  await pickZoom(page, 'fit');
-  await expect(page.locator('#zoom-value')).toHaveText('Fit');
-  expect(await previewZoom(page)).toBeLessThan(0.75);
-  expect(await panesStillScrolling(page)).toEqual([]);
 });
 
 test('leaves the browser its own zoom shortcuts', async ({ context, server, extensionId }) => {
   const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
-  await pickZoom(page, 'fit');
+  const label = await page.locator('#zoom-value').textContent();
   const before = await previewZoom(page);
 
   // cmd or ctrl with plus, minus and 0 belong to the browser and zoom the page,
@@ -536,15 +539,15 @@ test('leaves the browser its own zoom shortcuts', async ({ context, server, exte
 
   expect(prevented).toEqual([false, false, false, false]);
   expect(await previewZoom(page)).toBe(before);
-  await expect(page.locator('#zoom-value')).toHaveText('Fit');
+  await expect(page.locator('#zoom-value')).toHaveText(label);
 });
 
-test('re-fits when the view switches', async ({ context, server, extensionId }) => {
+test('Fit re-measures when the view switches', async ({ context, server, extensionId }) => {
   const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
 
-  // Fit, not the level the page opened on: a fixed level is fixed, and re-fitting
-  // is what this is about.
-  await pickZoom(page, 'fit');
+  // Fit, not the level the page opened on: a fixed level is fixed, and
+  // re-measuring is what this is about. Retained machinery — see forceFit.
+  await forceFit(page);
   const rendered = await previewZoom(page);
 
   // Source shows the markup rather than the table it draws, and clipboard
@@ -557,7 +560,7 @@ test('re-fits when the view switches', async ({ context, server, extensionId }) 
   expect(await previewZoom(page)).toBeLessThan(rendered);
 });
 
-test('re-fits when a pane starts wrapping', async ({ context, server, extensionId }) => {
+test('Fit re-measures when a pane starts wrapping', async ({ context, server, extensionId }) => {
   // One long line, which is one line tall until it is wrapped. Everything else
   // in this copy is small, so the wrap toggle is the only thing that can move
   // the number. Long enough that the wrapped block lands inside the band and
@@ -572,7 +575,7 @@ test('re-fits when a pane starts wrapping', async ({ context, server, extensionI
   // lines and the zoom would never move, which is the right answer there and
   // no test of this one. Short enough that height has nothing left to give.
   await page.setViewportSize({ width: 1280, height: 620 });
-  await pickZoom(page, 'fit');
+  await forceFit(page);
   await expect.poll(() => previewZoom(page)).toBe(0.75);
 
   await page.locator('.card--plain .wrap-btn').click();
@@ -649,7 +652,7 @@ test('room goes to the panes before the zoom starts shrinking', async ({ context
   const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
 
   await page.setViewportSize({ width: 1280, height: 700 });
-  await pickZoom(page, 'fit');
+  await forceFit(page);
   await expect.poll(() => previewZoom(page)).toBeLessThan(0.75);
 
   // The same copy, the same Fit, a window with room in it: the panes grow into
