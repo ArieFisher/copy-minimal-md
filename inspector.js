@@ -976,15 +976,28 @@ function fitPanesToWindow() {
 /* ----------------------------------------------------------- preview zoom */
 
 /**
- * Fit stops here, and the menu offers the same figure as its smallest step.
+ * The band Fit is allowed to land in. The menu reaches past both ends.
  *
- * A quarter size is past reading and into looking: the words are gone, but the
- * shape of the payload — how many rows, how deep the nesting, where the table
- * ends — is all still there, and that is what the comparison is for. Below it
- * even that goes, so a pane that cannot fit at 25% does what it always did:
- * shows what it can and scrolls for the rest.
+ * Fit is the one scale nobody picks: it runs on every open and every resize,
+ * and whatever it decides is what the copy is first seen at. So it is held to a
+ * range that reads well whatever the payload turns out to be, rather than
+ * following the arithmetic wherever it goes.
+ *
+ * It stops at half size. Below that the words start going, and a pane that
+ * cannot be fitted above the floor does what it always did: shows what it can
+ * and scrolls for the rest.
+ *
+ * It opens no higher than three quarters, so the first look at a copy is a look
+ * at the whole of it — the payload and the room around it — and not a pane
+ * filled to its edges.
+ *
+ * Neither end binds a choice made by hand. The menu still offers 25%, for
+ * looking at the shape of something long without arguing with the window, and
+ * everything from 90% up for reading it closely. A figure picked there stands
+ * until Fit is asked for again.
  */
-const ZOOM_FIT_FLOOR = 0.25;
+const ZOOM_FIT_FLOOR = 0.5;
+const ZOOM_FIT_CEILING = 0.75;
 
 const zoomEls = {};   // filled in at DOMContentLoaded
 
@@ -1002,7 +1015,8 @@ function everyPaneClears() {
 }
 
 /**
- * Fit: the largest scale at which every pane's content clears its own cap.
+ * Fit: the largest scale within the band at which every pane's content clears
+ * its own cap.
  *
  * One scale for the whole page, not one per pane. Packing each pane
  * separately would fit more in, but a row of this grid exists to be compared
@@ -1017,22 +1031,24 @@ function everyPaneClears() {
  * to and leaves room standing empty. Half a dozen passes find the real answer
  * either way.
  *
- * Never larger than life: Fit shows the whole payload, it does not enlarge one
- * that already fits.
+ * Never past the ceiling: a payload that would have cleared at full size opens
+ * at three quarters and stays there. Fit is where a copy is first seen, not the
+ * last word on how to see it, and full size is one step down the menu.
  *
  * Width is left alone. Long lines are the line-wrap toggle's job, one pane at
  * a time, and Fit does not touch it.
  */
 function computeFit() {
-    setPreviewZoom(1);
-    if (everyPaneClears()) return 1;
+    setPreviewZoom(ZOOM_FIT_CEILING);
+    if (everyPaneClears()) return ZOOM_FIT_CEILING;
 
     // Percent points, so the answer is a round number the menu could name.
     // `low` is the largest scale known to clear — or the floor, which stands
     // whether it cleared or not, because past it the payload is not worth
-    // reading and scrolling is the better answer.
+    // reading and scrolling is the better answer. `high` starts at the ceiling,
+    // which the line above has just shown does not clear.
     let low = ZOOM_FIT_FLOOR * 100;
-    let high = 100;
+    let high = ZOOM_FIT_CEILING * 100;
 
     while (high - low > 1) {
         const mid = Math.floor((low + high) / 2);

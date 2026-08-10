@@ -341,8 +341,9 @@ function tableCopy(rows) {
   };
 }
 
-/** Overruns every pane's cap at 100%, and fits inside them well above the
- *  floor — so Fit is doing the arithmetic and not just bottoming out. */
+/** Overruns every pane's cap at the ceiling, and fits inside them well above
+ *  the floor — so Fit is doing the arithmetic and not resting on either end of
+ *  its band. */
 const TALL_COPY = tableCopy(10);
 
 /** Past what the floor can rescue. It holds, and the pane scrolls, the way it
@@ -373,7 +374,7 @@ async function pickZoom(page, value) {
  * The payload is measured by height. A table cell's width is bounded by the
  * pane it sits in, and zooming out hands the layer more room in layout pixels
  * than it hands back in scale — so a full-width table can come out the same
- * width at 50% as at 200%. Its rows cannot.
+ * width at 25% as at 150%. Its rows cannot.
  */
 function boxes(page) {
   return page.evaluate(() => {
@@ -398,7 +399,10 @@ test('opens at Fit, with the whole payload inside the panes', async ({ context, 
   });
 
   await expect(page.locator('#zoom-value')).toHaveText('Fit');
-  expect(await previewZoom(page)).toBeLessThan(1);
+  // Strictly inside the band: this is a scale Fit worked out, not either end of
+  // the range it is allowed to answer with.
+  expect(await previewZoom(page)).toBeLessThan(0.75);
+  expect(await previewZoom(page)).toBeGreaterThan(0.5);
   expect(await panesStillScrolling(page)).toEqual([]);
 
   // …and the payload is one that would not have fitted on its own, which is
@@ -407,7 +411,7 @@ test('opens at Fit, with the whole payload inside the panes', async ({ context, 
   expect((await panesStillScrolling(page)).length).toBeGreaterThan(0);
 });
 
-test('Fit stops at 25% rather than shrink a payload out of all legibility', async ({ context, server, extensionId }) => {
+test('Fit stops at 50% rather than shrink a payload out of all legibility', async ({ context, server, extensionId }) => {
   const page = await inspectClipboard({ context, server, extensionId }, { ...ENDLESS_COPY });
   // Deliberate: a window with room in it would hand the panes height instead,
   // and the floor is about the case where there is none to hand.
@@ -417,13 +421,14 @@ test('Fit stops at 25% rather than shrink a payload out of all legibility', asyn
   // far as the floor and no further, and what is left over scrolls — which is
   // what the pane did before there was a zoom at all.
   await expect(page.locator('#zoom-value')).toHaveText('Fit');
-  await expect.poll(() => previewZoom(page)).toBe(0.25);
+  await expect.poll(() => previewZoom(page)).toBe(0.5);
   expect((await panesStillScrolling(page)).length).toBeGreaterThan(0);
 });
 
-test('the menu offers the floor as a step of its own', async ({ context, server, extensionId }) => {
-  // Fit reaches 25% only when it has to. The menu offers it outright, for
-  // looking at the shape of something long without arguing with the window.
+test('the menu goes below where Fit will', async ({ context, server, extensionId }) => {
+  // Fit will not shrink a payload past half size on its own. Asked outright it
+  // will, for looking at the shape of something long without arguing with the
+  // window — the floor is a default, not a limit.
   const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
 
   await pickZoom(page, '0.25');
@@ -432,14 +437,21 @@ test('the menu offers the floor as a step of its own', async ({ context, server,
   expect(await panesStillScrolling(page)).toEqual([]);
 });
 
-test('Fit does not enlarge a payload that already fits', async ({ context, server, extensionId }) => {
+test('Fit opens at the ceiling rather than fill the panes to their edges', async ({ context, server, extensionId }) => {
   const page = await inspectClipboard({ context, server, extensionId }, {
     plain: 'Heading\nsome text',
     html: '<h1>Heading</h1><p>some <b>text</b></p>',
   });
 
+  // Small enough to clear at full size with room to spare. Fit still opens it
+  // at three quarters, and 100% is there in the menu for anyone who wants it.
   await expect(page.locator('#zoom-value')).toHaveText('Fit');
+  expect(await previewZoom(page)).toBe(0.75);
+  expect(await panesStillScrolling(page)).toEqual([]);
+
+  await pickZoom(page, '1');
   expect(await previewZoom(page)).toBe(1);
+  expect(await panesStillScrolling(page)).toEqual([]);
 });
 
 test('the chrome holds its size while the payload scales', async ({ context, server, extensionId }) => {
@@ -447,9 +459,10 @@ test('the chrome holds its size while the payload scales', async ({ context, ser
     ...TALL_COPY,
   });
 
-  await pickZoom(page, '0.5');
+  // The two ends of the menu.
+  await pickZoom(page, '0.25');
   const small = await boxes(page);
-  await pickZoom(page, '2');
+  await pickZoom(page, '1.5');
   const large = await boxes(page);
 
   // The zoom is doing something…
@@ -477,7 +490,7 @@ test('a level picked by hand replaces Fit, and Fit comes back', async ({ context
 
   await pickZoom(page, 'fit');
   await expect(page.locator('#zoom-value')).toHaveText('Fit');
-  expect(await previewZoom(page)).toBeLessThan(1);
+  expect(await previewZoom(page)).toBeLessThan(0.75);
   expect(await panesStillScrolling(page)).toEqual([]);
 });
 
@@ -517,8 +530,9 @@ test('re-fits when the view switches', async ({ context, server, extensionId }) 
 test('re-fits when a pane starts wrapping', async ({ context, server, extensionId }) => {
   // One long line, which is one line tall until it is wrapped. Everything else
   // in this copy is small, so the wrap toggle is the only thing that can move
-  // the number.
-  const longLine = 'lorem ipsum dolor sit amet '.repeat(25).trim();
+  // the number. Long enough that the wrapped block lands inside the band and
+  // not on the ceiling, where the move would be invisible.
+  const longLine = 'lorem ipsum dolor sit amet '.repeat(80).trim();
   const page = await inspectClipboard({ context, server, extensionId }, {
     plain: longLine,
     html: '<p>a short paragraph</p>',
@@ -528,11 +542,11 @@ test('re-fits when a pane starts wrapping', async ({ context, server, extensionI
   // lines and the zoom would never move, which is the right answer there and
   // no test of this one. Short enough that height has nothing left to give.
   await page.setViewportSize({ width: 1280, height: 620 });
-  await expect.poll(() => previewZoom(page)).toBe(1);
+  await expect.poll(() => previewZoom(page)).toBe(0.75);
 
   await page.locator('.card--plain .wrap-btn').click();
   await expect(page.locator('.card--plain .card-source')).toHaveClass(/is-wrapped/);
-  expect(await previewZoom(page)).toBeLessThan(1);
+  expect(await previewZoom(page)).toBeLessThan(0.75);
   expect(await panesStillScrolling(page)).toEqual([]);
 });
 
@@ -604,14 +618,14 @@ test('room goes to the panes before the zoom starts shrinking', async ({ context
   const page = await inspectClipboard({ context, server, extensionId }, { ...TALL_COPY });
 
   await page.setViewportSize({ width: 1280, height: 700 });
-  await expect.poll(() => previewZoom(page)).toBeLessThan(1);
+  await expect.poll(() => previewZoom(page)).toBeLessThan(0.75);
 
   // The same copy, the same Fit, a window with room in it: the panes grow into
-  // it and the payload goes back to full size rather than being shrunk to suit
-  // a cap that did not have to be that small.
+  // it and the payload goes back up to the ceiling rather than being shrunk to
+  // suit a cap that did not have to be that small.
   await page.setViewportSize({ width: 1280, height: 1500 });
   await expect(page.locator('#zoom-value')).toHaveText('Fit');
-  await expect.poll(() => previewZoom(page)).toBe(1);
+  await expect.poll(() => previewZoom(page)).toBe(0.75);
   expect(await panesStillScrolling(page)).toEqual([]);
 });
 
@@ -638,6 +652,11 @@ test('the Simple HTML card draws an image at the size the copy asked for', async
     const r = n.getBoundingClientRect();
     return `${Math.round(r.width)}x${Math.round(r.height)}`;
   });
+
+  // These are measured in rendered pixels, which the preview zoom scales. Pin it
+  // at full size so the figures below are the ones the copy asked for, and not
+  // those figures times whatever Fit made of this window.
+  await pickZoom(page, '1');
 
   // 14px on one axis alone: the other comes from the file's own proportions.
   await expect.poll(() => box('.card--simple-html .card-render img >> nth=0')).toBe('14x14');
