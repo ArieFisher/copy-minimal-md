@@ -19,9 +19,9 @@
            beside it governs what they draw. Two different questions, so a
            hairline keeps them from reading as one cluster of controls. -->
       <div class="zoom" id="zoom">
-        <button type="button" class="zoom-trigger is-fit" id="zoom-trigger" aria-haspopup="listbox"
+        <button type="button" class="zoom-trigger" id="zoom-trigger" aria-haspopup="listbox"
           aria-expanded="false" aria-controls="zoom-menu" aria-label="Preview zoom">
-          <span class="zoom-value" id="zoom-value">Fit</span>
+          <span class="zoom-value" id="zoom-value">75%</span>
           <svg class="zoom-caret" viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor"
             stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M2.5 4.5 6 8l3.5-3.5" />
@@ -29,9 +29,13 @@
         </button>
 
         <ul class="zoom-menu" id="zoom-menu" role="listbox" aria-label="Preview zoom" hidden>
-          <li class="zoom-option zoom-option--fit" id="zoom-opt-fit" role="option" data-zoom="fit"
-            aria-selected="true">Fit</li>
-          <li class="zoom-sep" role="presentation"></li>
+          <!-- The Fit row sat here, reading "Fit (61%)". It was taken out because
+               it duplicates a step it sits beside: Fit only ever shrinks, so for
+               any copy small enough to clear at the ceiling it reports exactly
+               75%, directly above a row that reads 75%. The machinery behind it
+               is still in inspector.js and still runs — computeFit decides which
+               level a copy opens on — so putting the row back is this markup plus
+               the separator under it, and nothing else. -->
           <li class="zoom-option" id="zoom-opt-25" role="option" data-zoom="0.25" aria-selected="false">25%</li>
           <li class="zoom-option" id="zoom-opt-50" role="option" data-zoom="0.5" aria-selected="false">50%</li>
           <li class="zoom-option" id="zoom-opt-75" role="option" data-zoom="0.75" aria-selected="false">75%</li>
