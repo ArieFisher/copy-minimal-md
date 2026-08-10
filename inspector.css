@@ -238,6 +238,22 @@ body {
   color: var(--text-primary);
 }
 
+/* What Fit would give, in the same face as the levels it sits above — it is one
+   of their figures, quoted. Kept quieter than the word it follows: the row is
+   still called Fit, and the number is what that turns out to mean this time. */
+.zoom-fit-pct {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+.zoom-option--fit:hover .zoom-fit-pct,
+.zoom-option--fit.is-cursor .zoom-fit-pct,
+.zoom-option--fit[aria-selected="true"] .zoom-fit-pct {
+  color: var(--text-secondary);
+}
+
 .zoom-option:hover,
 .zoom-option.is-cursor {
   background: var(--control-fill);

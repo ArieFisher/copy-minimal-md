@@ -59,11 +59,12 @@ function prettyPrintHtml(html, { uppercaseTags = false } = {}) {
 
 const state = {
     view: 'rendered',            // 'rendered' | 'source'
-    // How big the preview panes draw the payload: 'fit', or a scale like 1.25.
-    // Every inspect starts at Fit — a copy is worth seeing whole before it is
-    // worth reading, and the size that takes is a property of the copy, not
-    // something the user should have to ask for each time.
-    zoom: 'fit',
+    // How big the preview panes draw the payload: 'fit', a scale like 1.25, or
+    // 'auto' — which is not a scale at all but a note that none has been chosen
+    // yet, and the opening one is still to be worked out from the payload. It
+    // resolves to a scale the first time the zoom is applied and is never seen
+    // again until the next copy is read.
+    zoom: 'auto',
     // Per-pane line wrapping in the source view. Off by default: long lines run
     // off the edge and the pane scrolls, keeping the payload's real line
     // structure readable.
@@ -235,10 +236,10 @@ async function readClipboard() {
         state.mdDone = false;
         state.htmlDone = false;
         state.extras = extras;
-        // A different copy is a different inspect, and every inspect opens on
-        // the whole of what was copied. A level chosen for the payload that
-        // just left is not a level chosen for this one.
-        state.zoom = 'fit';
+        // A different copy is a different inspect, and every inspect works its
+        // opening level out afresh. A level chosen for the payload that just
+        // left is not a level chosen for this one.
+        state.zoom = 'auto';
 
         let derived = null;
         try {
@@ -1073,17 +1074,46 @@ function computeFit() {
 }
 
 /**
+ * The level a copy opens at: whichever end of the band Fit came out nearer.
+ *
+ * Fit answers with the truth about the payload — 53%, 61% — and that is the
+ * right answer to "how big is this?" and the wrong one to open on. A scale
+ * nobody picked should be one of the ones they could have picked, so the two
+ * figures the band is built from are the two it can settle on, and the opening
+ * state is an ordinary choice from the menu rather than a mode with its own
+ * rules. Fit is still there, still exact, one step up the list.
+ *
+ * A tie goes down. Half way between the two, the smaller shows more of the
+ * copy, which is what the first look is for.
+ */
+function openingZoom(fit) {
+    return fit - ZOOM_FIT_FLOOR <= ZOOM_FIT_CEILING - fit ? ZOOM_FIT_FLOOR : ZOOM_FIT_CEILING;
+}
+
+/**
  * Put the current choice on the page. Fit is recomputed here rather than
  * remembered: render() has just rebuilt the panes it was measured against, and
  * a wrap toggle or a view switch changes how tall the same payload stands.
+ *
+ * It is computed whether or not it is the current choice, because the menu
+ * names the figure it would give. That costs a search the page would otherwise
+ * have skipped, and buys a menu that says what it does before it is picked
+ * rather than after.
  */
 function applyZoom() {
+    const fit = computeFit();
+    if (state.zoom === 'auto') state.zoom = openingZoom(fit);
+
     const isFit = state.zoom === 'fit';
-    setPreviewZoom(isFit ? computeFit() : state.zoom);
+    // computeFit leaves the panes at the scale it found, which is the answer
+    // only when Fit is the choice. Otherwise it is scaffolding, and the real
+    // choice goes on after it.
+    setPreviewZoom(isFit ? fit : state.zoom);
 
     if (!zoomEls.trigger) return;
     zoomEls.value.textContent = isFit ? 'Fit' : `${Math.round(state.zoom * 100)}%`;
     zoomEls.trigger.classList.toggle('is-fit', isFit);
+    zoomEls.fitPct.textContent = `(${Math.round(fit * 100)}%)`;
 
     const selected = isFit ? 'fit' : String(state.zoom);
     zoomEls.options.forEach(option => {
@@ -1126,6 +1156,7 @@ function moveZoomCursor(delta) {
 function wireZoomControl() {
     zoomEls.trigger = document.getElementById('zoom-trigger');
     zoomEls.value = document.getElementById('zoom-value');
+    zoomEls.fitPct = document.getElementById('zoom-fit-pct');
     zoomEls.menu = document.getElementById('zoom-menu');
     zoomEls.options = [...zoomEls.menu.querySelectorAll('.zoom-option')];
     zoomEls.cursor = 0;
