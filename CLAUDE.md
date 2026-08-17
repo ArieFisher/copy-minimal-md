@@ -20,19 +20,37 @@ Tests here run on Linux, and most users are on macOS. Something a Linux run does
 not do, the product may still do. Do not conclude "the browser doesn't do that"
 from one platform — say which platform you measured, or go and check the other.
 
-## Explanations
+## Writing style
 
-- **Start with a TL;DR.** The conclusion first, then the support.
-- **No code references unless asked.** No file paths, line numbers, function or
-  symbol names, no code blocks. Describe behaviour in plain terms — what the
-  thing does, not what it is called. When the owner asks for the code, give the
-  code.
-- **Be precise and concise.** Before sending, re-read and cut whatever can go
-  without losing information. Prefer the shorter phrasing over the more
-  impressive one.
+These rules govern all prose: chat responses, documents, pull request titles
+and bodies, issues, commit messages, logs.
 
-This applies to all communications with the owner, including explanations,
-routine status updates, and summaries of completed work.
+- **Form:** plain declarative sentences in active voice; not epigrammatic, not
+  aphoristic.
+- **Structure:** no antithesis. Present each point on its own, without a
+  contrasting counterpart.
+- **Imagery:** no personification; describe things literally.
+- **Diction:** Plain English, Saxon diction (preserve technical terms). Avoid
+  Latinate words where a short common word exists.
+- **Tone:** laconic. Cut qualifiers, hedging, and introductory fluff.
+- **Voice:** high information density. State facts directly in active voice; no
+  passive voice, no filler sentences.
+- **Concision:** draft, then rewrite at maximum compression; output only the
+  rewrite. Cut any word whose removal loses no information. Merge sentences
+  that share a subject. Do not state what a prior sentence already implies.
+  Target the minimum word count that preserves all content.
+- **Conclusions only:** report findings, not the process that produced them. Do
+  not narrate how you got there, what you considered, or what you ruled out.
+  Cut retractions, dead ends, counts of discarded items, and self-audit
+  narrative.
+
+## Explanations (chat)
+
+In addition to Writing style:
+
+- **TL;DR first.** Conclusion, then support.
+- **No code references unless the owner asks.** No file paths, line numbers,
+  function or symbol names, code blocks. Describe behaviour in plain words.
 
 ## When a change does not show up
 
@@ -113,21 +131,14 @@ contributor would: describe the change and why, and stop there.
 
 ## Writing a pull request
 
-Pull request titles and bodies follow the Explanations rules above — the
-conclusion first, precise and concise — plus:
+In addition to Writing style:
 
-- **Conclusions only.** Do not narrate the investigation. Hypotheses that
-  proved wrong, paths abandoned and things ruled out do not belong in the
-  body — state what is true and what changed. The exception: a rejected
-  alternative worth recording so nobody retries it, in one line.
-- **No essayistic prose, no algorithmic platitudes.** Skip the throat-clearing,
-  the restated problem statement, and lines like "this ensures correctness" or
-  "this improves robustness". Say what changed, why, and what it costs.
-
-The rule against code references is the one part of Explanations a pull request
-body does not inherit: a change to this extension often cannot be described
-without naming what it produces. Name it when the change needs it, and no more
-than that — the section on markup below governs how.
+- The chat no-code rule does not apply: name the files, symbols and functions
+  the diff touches wherever that helps the reviewer. The section on markup
+  below governs how.
+- One exception to conclusions-only: record a rejected alternative in one line
+  when the record stops a retry.
+- State what changed, why, and the cost.
 
 ## Signing a pull request
 
