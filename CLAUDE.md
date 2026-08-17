@@ -20,24 +20,19 @@ Tests here run on Linux, and most users are on macOS. Something a Linux run does
 not do, the product may still do. Do not conclude "the browser doesn't do that"
 from one platform — say which platform you measured, or go and check the other.
 
-## Explaining things
+## Explanations
 
-When walking the owner through how something works — a diagnosis, a pipeline,
-a piece of unfamiliar machinery — do not deliver it as one big writeup as that
-may lose the reader at the top. Instead:
+- **Start with a TL;DR.** The conclusion first, then the support.
+- **No code references unless asked.** No file paths, line numbers, function or
+  symbol names, no code blocks. Describe behaviour in plain terms — what the
+  thing does, not what it is called. When the owner asks for the code, give the
+  code.
+- **Be precise and concise.** Before sending, re-read and cut whatever can go
+  without losing information. Prefer the shorter phrasing over the more
+  impressive one.
 
-- Break it into small parts, one idea per part, ordered so each builds on the
-  last.
-- Assume the reader has less background than seems necessary.
-- End each part by checking understanding, and wait for confirmation before
-  going on to the next.
-- Name the exact line of code only once the idea it implements is already
-  understood.
-- Explain a metaphor or coined term the first time it is used, and confirm
-  it landed before building on it.
-
-This applies to all communications with the owner, including explanations, routine status
-updates, and summaries of completed work.
+This applies to all communications with the owner, including explanations,
+routine status updates, and summaries of completed work.
 
 ## When a change does not show up
 
@@ -115,6 +110,24 @@ Omit all of the following:
 
 Write commit messages and pull request descriptions the way a human
 contributor would: describe the change and why, and stop there.
+
+## Writing a pull request
+
+Pull request titles and bodies follow the Explanations rules above — the
+conclusion first, precise and concise — plus:
+
+- **Conclusions only.** Do not narrate the investigation. Hypotheses that
+  proved wrong, paths abandoned and things ruled out do not belong in the
+  body — state what is true and what changed. The exception: a rejected
+  alternative worth recording so nobody retries it, in one line.
+- **No essayistic prose, no algorithmic platitudes.** Skip the throat-clearing,
+  the restated problem statement, and lines like "this ensures correctness" or
+  "this improves robustness". Say what changed, why, and what it costs.
+
+The rule against code references is the one part of Explanations a pull request
+body does not inherit: a change to this extension often cannot be described
+without naming what it produces. Name it when the change needs it, and no more
+than that — the section on markup below governs how.
 
 ## Signing a pull request
 
