@@ -377,9 +377,9 @@ function filterStyleAttribute(node, data) {
 /**
  * Insert untrusted HTML as a rendered preview.
  *
- * `keepStyles` is for the clipboard's own text/html: that card is there to show
- * what is really on the clipboard, and for a copy out of Sheets or Word the
- * formatting is carried entirely by inline styles. Strip those and the card
+ * `keepStyles` is for the clipboard's own entries: those cards are there to
+ * show what is really on the clipboard, and for a copy out of Sheets or Word
+ * the formatting is carried entirely by inline styles. Strip those and the card
  * renders the same bare table as the Simple HTML beside it, which reads as "you
  * lose nothing" next to a header saying the payload is 44× the text it carries.
  * InlineStyle.filter says what a declaration is allowed to do.
@@ -529,11 +529,30 @@ function buildPlainCard() {
         return card;
     }
 
-    // Plain text has no rendered form — this card is always a <pre>, so its
-    // wrap toggle shows in both views.
-    head.appendChild(buildWrapToggle('plain'));
+    // Source is the entry as it stands. The rendered view draws it as what it
+    // holds: Markdown as a document, markup as a page, and anything else as
+    // the characters it is — which is the source pane again, so the two views
+    // of a truly plain entry are the same view.
+    const text = state.current.plain;
+    let kind = state.view === 'source' ? 'text' : PlainKind.of(text);
+    if (kind === 'markdown' && typeof marked === 'undefined') kind = 'text';
+
+    if (kind === 'text') {
+        head.appendChild(buildWrapToggle('plain'));
+        card.appendChild(head);
+        card.appendChild(buildSourcePre('plain', redactBase64(text) || '[Empty String]'));
+        return card;
+    }
+
+    // Say why this pane is not showing the characters on the clipboard.
+    head.appendChild(el('span', 'card-note', kind === 'html' ? '\u00b7 rendered as HTML' : '\u00b7 rendered as Markdown'));
     card.appendChild(head);
-    card.appendChild(buildSourcePre('plain', redactBase64(state.current.plain) || '[Empty String]'));
+
+    const { pane, layer } = buildRenderPane();
+    // Same rule as the text/html card: this is the clipboard's own payload, so
+    // the formatting it carries stays on.
+    renderHtmlInto(layer, kind === 'html' ? text : marked.parse(text, { breaks: true }), { keepStyles: true });
+    card.appendChild(pane);
     return card;
 }
 
