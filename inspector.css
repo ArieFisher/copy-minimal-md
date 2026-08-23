@@ -526,14 +526,16 @@ body {
   flex: 1;
 }
 
-/* The only pane that renders CSS it did not write — the clipboard's text/html
-   keeps its own inline styles, so the card shows the formatting the payload
-   actually carries. Containment is what keeps that CSS inside the card: a
+/* The two panes that render CSS they did not write — a clipboard entry keeps
+   its own inline styles, so the card shows the formatting the payload actually
+   carries. The plain entry is here because it is not always plain: Markdown or
+   markup on the clipboard's text/plain is drawn as what it is. Containment is what keeps that CSS inside the card: a
    contained box is the containing block for its fixed- and absolutely-
    positioned descendants, so nothing in a payload can lay itself over the page
    chrome or the replace controls. `layout paint` only — `size` would let the
    payload dictate the card's height. */
-.card--html .card-render {
+.card--html .card-render,
+.card--plain .card-render {
   padding: 18px 22px;
   contain: layout paint;
 }
@@ -647,8 +649,7 @@ body {
   overflow-wrap: break-word;
 }
 
-/* text/plain has no rendered form, so its body is always a <pre> — and it sits
-   on the card background rather than the source tint. */
+/* The plain entry sits on the card background rather than the source tint. */
 .card--plain .card-source {
   font-size: 12.5px;
   padding: 16px 20px;

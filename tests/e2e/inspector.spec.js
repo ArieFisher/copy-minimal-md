@@ -127,6 +127,69 @@ test('keeps the actions live when the equivalents would change something', async
   await expect(page.locator('.card--markdown .card-render')).toHaveCount(1);
 });
 
+/* ------------------------------------------- what the plain entry really is */
+
+test('draws a Markdown plain entry as a document', async ({ context, server, extensionId }) => {
+  // What cmd+shift+U leaves behind: text/plain holding a Markdown table. The
+  // rendered view draws the table rather than the pipes that describe it.
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    plain: HOTKEY_PLAIN,
+    html: HOTKEY_HTML,
+  });
+
+  await expect(page.locator('.card--plain .card-render table')).toBeVisible();
+  await expect(page.locator('.card--plain .card-render th').first()).toHaveText('Name');
+  await expect(page.locator('.card--plain .card-source')).toHaveCount(0);
+  await expect(page.locator('.card--plain .card-note')).toHaveText(/rendered as Markdown/);
+
+  // Source is the entry as it stands, whatever it holds.
+  await page.locator('#view-toggle .segment[data-view="source"]').click();
+  await expect(page.locator('.card--plain .card-source')).toContainText('| --- | --- |');
+  await expect(page.locator('.card--plain .card-render')).toHaveCount(0);
+});
+
+test('draws an HTML plain entry as a page', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    plain: '<p style="color: rgb(0, 0, 255)">a paragraph</p><ul><li>one</li><li>two</li></ul>',
+  });
+
+  await expect(page.locator('.card--plain .card-note')).toHaveText(/rendered as HTML/);
+  await expect(page.locator('.card--plain .card-render li')).toHaveCount(2);
+  // The clipboard's own entry, so it keeps the formatting it carries.
+  expect(await page.locator('.card--plain .card-render p')
+    .evaluate((el) => getComputedStyle(el).color)).toBe('rgb(0, 0, 255)');
+});
+
+test('a truly plain entry reads the same in both views', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    plain: 'yellow highlight\titalics\nfunny font\tblue',
+    html: SHEETS_HTML,
+  });
+
+  const rendered = await page.locator('.card--plain .card-source').innerText();
+  await expect(page.locator('.card--plain .card-note')).toHaveCount(0);
+  // The wrap toggle stays with it — the pane is still preformatted text.
+  await expect(page.locator('.card--plain .wrap-btn')).toBeVisible();
+
+  await page.locator('#view-toggle .segment[data-view="source"]').click();
+  expect(await page.locator('.card--plain .card-source').innerText()).toBe(rendered);
+});
+
+test('a plain entry cannot restyle the inspector around it', async ({ context, server, extensionId }) => {
+  const page = await inspectClipboard({ context, server, extensionId }, {
+    plain: '<style>.card, .app-bar { display: none !important; }</style>'
+         + '<p class="card-head" id="output-container" style="position: fixed; top: 0; left: 0;">hostile</p>',
+  });
+
+  await expect(page.locator('.app-bar')).toBeVisible();
+  await expect(page.locator('.card--plain')).toBeVisible();
+
+  const para = page.locator('.card--plain .card-render p');
+  expect(await para.evaluate((el) => el.className)).toBe('');
+  expect(await para.evaluate((el) => el.id)).toBe('');
+  expect(await para.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed');
+});
+
 /* --------------------------------------------------- the payload's own CSS */
 
 /** A Sheets copy, trimmed to the cells that carry formatting. Every style
