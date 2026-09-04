@@ -13,6 +13,8 @@
  * from tells that page's server who opened it and when.
  */
 const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { test, expect, inspectClipboard } = require('./fixtures.js');
 
 /** What cmd+shift+U leaves behind: both equivalents already on the clipboard. */
@@ -23,14 +25,28 @@ const HOTKEY_HTML = '<table><tbody><tr><th>Name</th><th>Age</th></tr><tr><td>Ali
 const RAW_PLAIN = 'Heading\nsome text';
 const RAW_HTML = '<h1 style="color:red">Heading</h1><p>some <b>text</b></p>';
 
+/**
+ * Save a download somewhere a browser will open as a page.
+ *
+ * download.path() hands back a temp file with no extension, and Chrome shown
+ * one of those renders it as text — so a test that opens the capture cold has
+ * to give it its name back first.
+ */
+let saved = 0;
+async function keep(download) {
+    const file = path.join(os.tmpdir(), `capture-e2e-${process.pid}-${saved++}.html`);
+    await download.saveAs(file);
+    return file;
+}
+
 /** Press the left half and read the file it writes. */
 async function capture(page) {
     const [download] = await Promise.all([
         page.waitForEvent('download'),
         page.locator('#capture-btn').click()
     ]);
-    const path = await download.path();
-    return { download, path, html: fs.readFileSync(path, 'utf8') };
+    const file = await keep(download);
+    return { download, path: file, html: fs.readFileSync(file, 'utf8') };
 }
 
 /* ------------------------------------------------------------ the control */
@@ -184,6 +200,18 @@ test('opens cold and phones nobody', async ({ context, server, extensionId }) =>
     await expect(reader.locator('#view-rendered .card--html table')).toBeVisible();
     await reader.waitForTimeout(500);
 
+    // The grid carries the width the columns had, and the page around it is
+    // the same width, so a reader as wide as the tester was scrolls nothing.
+    const fits = await reader.evaluate(() => {
+        const page = document.querySelector('.capture-page');
+        const room = page.clientWidth
+            - parseFloat(getComputedStyle(page).paddingLeft)
+            - parseFloat(getComputedStyle(page).paddingRight);
+        const grid = document.querySelector('#view-rendered .inspector-grid');
+        return grid.getBoundingClientRect().width <= room + 1;
+    });
+    expect(fits).toBe(true);
+
     const after = server.requests.filter((url) => url.includes('tracker-pixel')).length;
     expect(after).toBe(before);
 });
@@ -224,7 +252,7 @@ test('saves only what is left ticked', async ({ context, server, extensionId }) 
         page.waitForEvent('download'),
         page.locator('#capture-menu .capture-save').click()
     ]);
-    const html = fs.readFileSync(await download.path(), 'utf8');
+    const html = fs.readFileSync(await keep(download), 'utf8');
 
     expect(html).toContain('id="view-rendered"');
     expect(html).not.toContain('id="view-source"');

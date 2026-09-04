@@ -95,10 +95,15 @@
      * The same three-column grid the inspector draws, with the gutter empty —
      * its buttons act on the clipboard, and a capture has none. A card left out
      * becomes a spacer so the two columns stay aligned row for row.
+     *
+     * The width goes on as a ceiling rather than a figure. A reader as wide as
+     * the tester gets the columns at the width the tester had, so the text wraps
+     * where it wrapped; a narrower one gets a narrower grid instead of a page
+     * that scrolls sideways.
      */
     function gridFor(cards, width) {
         const grid = el('div', 'inspector-grid');
-        if (width) grid.style.width = `${width}px`;
+        if (width) grid.style.maxWidth = `${width}px`;
 
         const cell = (key) => cards[key] || el('div', 'grid-spacer');
 
@@ -155,6 +160,20 @@
     }
 
     /**
+     * The width the columns actually had, not the width of the box around them.
+     *
+     * The live grid carries its own padding and the capture's page carries the
+     * padding instead, so handing the border-box figure across makes the grid
+     * wider than the page that holds it and the section scrolls sideways for no
+     * reason. The content box is the figure that means the same thing on both
+     * sides: how much room the two columns of cards had to wrap text in.
+     */
+    function contentWidth(grid) {
+        const box = getComputedStyle(grid);
+        return Math.round(grid.clientWidth - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight));
+    }
+
+    /**
      * What the tester was looking at. The zoom and the pane caps go in so the
      * capture draws the panes at the size they were, which is the whole of its
      * claim to stand in for a screenshot.
@@ -170,7 +189,7 @@
             sourceUrl: url,
             platform: navigator.userAgent,
             zoom: Number.isFinite(zoom) ? zoom : 1,
-            captureWidth: grid ? Math.round(grid.getBoundingClientRect().width) : 0,
+            captureWidth: grid ? contentWidth(grid) : 0,
             paneCap: grid ? grid.style.getPropertyValue('--pane-cap') : '',
             paneCapHtml: grid ? grid.style.getPropertyValue('--pane-cap-html') : '',
             derivedFrom: state.derivedFrom || ''
@@ -274,20 +293,37 @@
 
     const els = {};
 
+    /** Roughly what a card costs in markup, over and above the payload in it. */
+    const PANE_CHROME = 1100;
+
+    /** What the report's own header, notes and section titles come to. */
+    const REPORT_CHROME = 4000;
+
     /**
      * A rough figure for what pressing Save writes, shown before it is written
-     * rather than after. The payloads dominate and they ride twice, once to be
-     * read and once as JSON; the rest is the two stylesheets and the markup
-     * around the panes.
+     * rather than after.
+     *
+     * The constant terms are guesses and the figure is labelled as an estimate
+     * because of them. They stop mattering in the case the number is for: a copy
+     * carrying an inline base64 image runs to megabytes of payload, and beside
+     * that the stylesheets and the card markup are rounding.
      */
     function estimate(selection, avail) {
-        const sheets = stylesheets ? byteLength(stylesheets.inspector) + byteLength(stylesheets.report) : 34000;
+        const sheets = stylesheets
+            ? byteLength(stylesheets.inspector) + byteLength(stylesheets.report)
+            : 30000;
+
+        // Twice: once to be read, once as JSON.
         const payloads = payloadKeys(selection, avail)
-            .reduce((total, key) => total + byteLength(textFor(key)), 0);
+            .reduce((total, key) => total + byteLength(textFor(key)), 0) * 2;
+
         const panes = VIEWS.reduce((total, view) =>
             total + Capture.CARD_KEYS.reduce((row, key) =>
-                row + (selection[view][key] && avail[key].on ? byteLength(textFor(key)) : 0), 0), 0);
-        return sheets + payloads * 2 + panes;
+                row + (selection[view][key] && avail[key].on
+                    ? byteLength(textFor(key)) + PANE_CHROME
+                    : 0), 0), 0);
+
+        return sheets + REPORT_CHROME + payloads + panes;
     }
 
     function row(label, checked, disabled, why, wire) {

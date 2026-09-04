@@ -1,6 +1,6 @@
 {
   "name": "copy-minimal-md",
-  "version": "0.10.10",
+  "version": "0.11.0",
   "private": true,
   "description": "Docs Markdown Cleaner Chrome extension — test harness",
   "scripts": {
