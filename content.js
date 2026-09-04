@@ -156,8 +156,8 @@ if (!window.__tsvCleanerListenerRegistered) {
                 // This handles sites like Google Finance Beta that produce no text/html payload.
                 if (gridResult?.type === 'aria' || gridResult?.type === 'heuristic') {
                     console.log(`Docs Cleaner: ${gridResult.type} grid detected; synthesizing Markdown from DOM structure.`);
-                    const gridMarkdown = Pipeline.gridToMarkdown(gridResult);
-                    await writeCleaned(gridMarkdown, Pipeline.gridToSimpleHtml(gridResult));
+                    const { markdown, simpleHtml } = Pipeline.gridToEntries(gridResult);
+                    await writeCleaned(markdown, simpleHtml);
                     console.log("Docs Cleaner: Grid Markdown written to clipboard.");
                     flashSuccess("Grid Table Ready!");
                     return;
