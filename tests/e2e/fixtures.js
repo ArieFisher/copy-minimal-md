@@ -86,3 +86,34 @@ exports.test = base.extend({
 });
 
 exports.expect = base.expect;
+
+/**
+ * Put the given entries on the real clipboard from a real page, then open the
+ * inspector on them.
+ *
+ * The seeding has to happen in an http:// page: an extension page cannot write
+ * a clipboard it has not been granted, and chrome.scripting refuses data: and
+ * about:blank. Returns the inspector page, once it has finished reading.
+ */
+exports.inspectClipboard = async function inspectClipboard({ context, server, extensionId }, { plain, html, png }) {
+  server.servePage('/seed.html', '<!doctype html><html><body>seed</body></html>');
+  const seeder = await context.newPage();
+  await seeder.goto(`${server.baseUrl}/seed.html`);
+  await seeder.bringToFront();
+  await seeder.evaluate(async ([p, h, image]) => {
+    const payload = {};
+    if (p) payload['text/plain'] = new Blob([p], { type: 'text/plain' });
+    if (h) payload['text/html'] = new Blob([h], { type: 'text/html' });
+    if (image) {
+      const bytes = Uint8Array.from(atob(image), (c) => c.charCodeAt(0));
+      payload['image/png'] = new Blob([bytes], { type: 'image/png' });
+    }
+    await navigator.clipboard.write([new ClipboardItem(payload)]);
+  }, [plain, html, png]);
+
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/inspector.html`);
+  await page.bringToFront();
+  await base.expect(page.locator('#loading')).toBeHidden();
+  return page;
+};

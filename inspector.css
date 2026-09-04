@@ -294,6 +294,206 @@ body {
   }
 }
 
+/* ------------------------------------------------------------ capture */
+
+/* A split control, built on the zoom's box next door: same fill, same border,
+   same caret, same menu shell. The left half writes everything; the caret opens
+   the list. One box with one hairline down it, so it reads as one control with
+   two doors rather than two buttons that happen to touch. */
+
+.capture {
+  position: relative;
+}
+
+.capture-split {
+  display: flex;
+  align-items: stretch;
+  background: var(--card-bg);
+  border: 1px solid var(--border-control);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.capture-split:hover {
+  border-color: var(--action);
+}
+
+.capture-btn,
+.capture-caret-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.capture-caret-btn {
+  padding: 7px 9px;
+  border-left: 1px solid var(--border-hairline);
+  color: var(--text-tertiary);
+}
+
+.capture-btn:hover,
+.capture-caret-btn:hover {
+  background: var(--control-fill);
+}
+
+.capture-btn:focus-visible,
+.capture-caret-btn:focus-visible {
+  outline: none;
+  background: var(--control-fill);
+  box-shadow: inset 0 0 0 2px rgba(95, 115, 70, 0.35);
+}
+
+.capture-glyph {
+  color: var(--text-tertiary);
+}
+
+.capture-caret {
+  transition: transform 0.16s ease;
+}
+
+.capture-caret-btn[aria-expanded="true"] .capture-caret {
+  transform: rotate(180deg);
+}
+
+/* Wider than the zoom menu, because these rows carry a reason as well as a
+   name. Everything else about the shell is the same. */
+.capture-menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 30;
+  width: 310px;
+  margin: 0;
+  padding: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-neutral);
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(60, 50, 20, 0.2);
+}
+
+.capture-menu[hidden] {
+  display: none;
+}
+
+.capture-group {
+  padding: 9px 8px 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.capture-group:first-child {
+  padding-top: 3px;
+}
+
+.capture-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.capture-row:hover {
+  background: var(--control-fill);
+}
+
+.capture-row input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--action);
+}
+
+/* The panel names the same four things the grid names, so it names them the
+   same way: a real MIME type in mono, a derived format in the serif. */
+.capture-name-mime {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.capture-name-mime.is-html {
+  color: var(--accent-html);
+}
+
+.capture-name-derived {
+  font-family: var(--font-serif);
+  font-size: 13.5px;
+}
+
+.capture-why {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* Nothing to capture. Switched off in plain sight with the reason beside it,
+   the way the gutter switches off an action that would do nothing. */
+.capture-row.is-off {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.capture-row.is-off:hover {
+  background: none;
+}
+
+.capture-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 9px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+/* What the file will run to, before it is written rather than after. A copy
+   carrying an inline image is megabytes, and that is worth knowing early. */
+.capture-size {
+  padding-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+.capture-save {
+  padding: 8px 16px;
+  background: var(--action);
+  border: none;
+  border-radius: 9px;
+  color: var(--card-bg);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(60, 60, 20, 0.18);
+}
+
+.capture-save:hover {
+  background: var(--action-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capture-caret {
+    transition: none;
+  }
+}
+
 /* --------------------------------------------------- loading / error state */
 
 #loading {

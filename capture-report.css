@@ -1,0 +1,203 @@
+/* =========================================================================
+   The capture report's own chrome.
+
+   Shipped inside every capture, after inspector.css and before the generated
+   :root block that carries the zoom and the pane caps the copy was seen at.
+   It dresses the parts of a capture the inspector has no equivalent for — the
+   header of facts, the two view sections, the verbatim payload blocks — and
+   changes nothing about how a card draws. A card in a capture is the card the
+   inspector built, under the stylesheet the inspector uses.
+
+   Nothing here runs in the extension. It is fetched, inlined, and read only by
+   whoever opens the saved file.
+   ========================================================================= */
+
+.capture-page {
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 26px 32px 48px;
+}
+
+/* ------------------------------------------------------------------ header */
+
+.capture-header {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-neutral);
+}
+
+.capture-title {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.capture-strap {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 8px 0 0;
+  max-width: 78ch;
+}
+
+/* The facts about the copy, two columns of term and value. A capture is
+   evidence, and evidence carries its provenance at the top. */
+.capture-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 18px;
+  row-gap: 5px;
+  margin: 16px 0 0;
+  font-size: 12.5px;
+}
+
+.capture-facts dt {
+  color: var(--text-tertiary);
+}
+
+.capture-facts dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------- notes */
+
+.capture-notes {
+  margin: 22px 0 0;
+  padding: 16px 20px;
+  background: var(--card-bg);
+  border: 1px dashed var(--border-control);
+  border-radius: 12px;
+}
+
+.capture-notes-title {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.capture-notes-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin: 0 0 12px;
+}
+
+.capture-notes dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 18px;
+  row-gap: 7px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.capture-notes dt {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.capture-notes dd {
+  margin: 0;
+  color: var(--text-tertiary);
+  border-bottom: 1px dotted var(--border-control);
+  min-height: 1.3em;
+}
+
+/* -------------------------------------------------------------- view rows */
+
+.capture-view-title,
+.capture-verbatim-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  margin: 34px 0 0;
+}
+
+.capture-view-hint,
+.capture-verbatim-hint {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-tertiary);
+  margin: 3px 0 0;
+  max-width: 78ch;
+}
+
+/* The grid inside carries the width the copy was seen at, so it wraps text the
+   way the tester saw it wrap. A narrower window scrolls this section rather
+   than reflowing the evidence. */
+.capture-view {
+  overflow-x: auto;
+}
+
+.capture-view .inspector-grid {
+  padding: 18px 0 0;
+  margin: 0;
+  max-width: none;
+}
+
+/* ---------------------------------------------------------------- verbatim */
+
+.capture-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.capture-block {
+  background: var(--card-bg);
+  border: 1px solid var(--border-neutral);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.capture-block-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+/* Verbatim, so the lines are the payload's own. A long one runs off and this
+   block scrolls; wrapping it would redraw the line structure the capture
+   exists to record. */
+.capture-block-body {
+  margin: 0;
+  padding: 14px 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text-pre);
+  background: var(--source-bg);
+}
+
+/* ------------------------------------------------------------------- foot */
+
+.capture-foot-note {
+  margin: 34px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-neutral);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-tertiary);
+  max-width: 78ch;
+}
+
+.capture-foot-note code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+@media (max-width: 620px) {
+  .capture-page {
+    padding: 20px 20px 36px;
+  }
+}

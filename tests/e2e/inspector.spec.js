@@ -1,4 +1,4 @@
-const { test, expect } = require('./fixtures.js');
+const { test, expect, inspectClipboard } = require('./fixtures.js');
 
 /** Exactly what cmd+shift+U leaves on the clipboard for a table copy — captured
  *  from a real run, so it carries the clipboard sanitizer's own normalisation
@@ -8,30 +8,6 @@ const HOTKEY_HTML = '<table><tbody><tr><th>Name</th><th>Age</th></tr><tr><td>Ali
 
 /** A 1×1 transparent PNG, for seeding a copy that carries no text at all. */
 const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-
-/** Put the given entries on the real clipboard from a real page, then open the inspector. */
-async function inspectClipboard({ context, server, extensionId }, { plain, html, png }) {
-  server.servePage('/seed.html', '<!doctype html><html><body>seed</body></html>');
-  const seeder = await context.newPage();
-  await seeder.goto(`${server.baseUrl}/seed.html`);
-  await seeder.bringToFront();
-  await seeder.evaluate(async ([p, h, image]) => {
-    const payload = {};
-    if (p) payload['text/plain'] = new Blob([p], { type: 'text/plain' });
-    if (h) payload['text/html'] = new Blob([h], { type: 'text/html' });
-    if (image) {
-      const bytes = Uint8Array.from(atob(image), (c) => c.charCodeAt(0));
-      payload['image/png'] = new Blob([bytes], { type: 'image/png' });
-    }
-    await navigator.clipboard.write([new ClipboardItem(payload)]);
-  }, [plain, html, png]);
-
-  const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/inspector.html`);
-  await page.bringToFront();
-  await expect(page.locator('#loading')).toBeHidden();
-  return page;
-}
 
 test('inspector page opens and renders the clipboard cards', async ({ context, extensionId }) => {
   const page = await context.newPage();
