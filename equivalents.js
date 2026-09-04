@@ -637,6 +637,33 @@
         const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
         if (typeof turndownPluginGfm !== 'undefined') {
             turndownService.use(turndownPluginGfm.gfm);
+
+            // A pipe in a cell ends that cell, so a cell carrying one comes out
+            // as two and the row runs wider than the table. GFM spells a pipe
+            // inside a cell `\|`, and that spelling holds inside a code span
+            // and a link destination as well.
+            //
+            // The escape goes here rather than in escapeMarkup because by this
+            // point the cell's content is finished: its text, its links and its
+            // code have all been written. Escaping text nodes alone would leave
+            // `ls | wc` in a code span and `?q=a|b` in a link splitting the row,
+            // since Turndown hands neither of those to its escape function.
+            //
+            // Everything else this does is what turndown-plugin-gfm's own cell
+            // rule does, and replaces it: the first cell of a row opens with a
+            // bar, and a newline inside a cell becomes the one line break a
+            // Markdown cell can carry. The delimiter row under the header is
+            // written by the plugin's row rule, which is left alone — it holds
+            // dashes.
+            turndownService.addRule('escapeCellPipes', {
+                filter: ['th', 'td'],
+                replacement: (content, node) => {
+                    const cells = Array.from(node.parentNode.childNodes);
+                    const prefix = cells.indexOf(node) === 0 ? '| ' : ' ';
+                    const escaped = content.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, '<br>');
+                    return prefix + escaped + ' |';
+                }
+            });
         }
 
         // Runs after Turndown's own escapes, so the backslashes it adds are not

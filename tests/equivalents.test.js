@@ -157,6 +157,64 @@ describe('Equivalents.fromHtml — text that reads as markup', () => {
   });
 });
 
+describe('Equivalents.fromHtml — a pipe in a cell', () => {
+  // A pipe ends a cell, so a cell carrying one used to come out as two and the
+  // row ran wider than the table.
+  const row = (markdown, first) => markdown.split('\n').find((l) => l.startsWith(`| ${first}`));
+
+  it('keeps a cell with a pipe in its text to one cell', () => {
+    const { markdown } = fromHtml(
+      '<table><thead><tr><th>Col</th><th>B</th></tr></thead>' +
+      '<tbody><tr><td>a | b</td><td>2</td></tr></tbody></table>'
+    );
+
+    expect(row(markdown, 'a')).toBe('| a \\| b | 2 |');
+  });
+
+  it('keeps a cell with a pipe in a link to one cell', () => {
+    // The pipe is in an attribute, so escaping text nodes would never see it.
+    const { markdown } = fromHtml(
+      '<table><thead><tr><th>Q</th></tr></thead>' +
+      '<tbody><tr><td><a href="https://x.test/?q=a|b">go</a></td></tr></tbody></table>'
+    );
+
+    expect(row(markdown, '[go]')).toBe('| [go](https://x.test/?q=a\\|b) |');
+  });
+
+  it('keeps a cell with a pipe in code to one cell', () => {
+    // Turndown hands code text straight through without escaping it.
+    const { markdown } = fromHtml(
+      '<table><thead><tr><th>Cmd</th></tr></thead>' +
+      '<tbody><tr><td><code>ls | wc</code></td></tr></tbody></table>'
+    );
+
+    expect(row(markdown, '`ls')).toBe('| `ls \\| wc` |');
+  });
+
+  it('leaves the delimiter row alone', () => {
+    const { markdown } = fromHtml(
+      '<table><thead><tr><th>Col</th><th>B</th></tr></thead>' +
+      '<tbody><tr><td>a | b</td><td>2</td></tr></tbody></table>'
+    );
+
+    expect(markdown).toContain('| --- | --- |');
+  });
+
+  it('leaves a pipe in prose bare', () => {
+    // Outside a table a pipe is an ordinary character.
+    expect(fromHtml('<p>Run a | b in the shell.</p>').markdown).toBe('Run a | b in the shell.');
+  });
+
+  it('still writes a cell line break', () => {
+    const { markdown } = fromHtml(
+      '<table><thead><tr><th>H</th></tr></thead>' +
+      '<tbody><tr><td><div>one</div><div>two</div></td></tr></tbody></table>'
+    );
+
+    expect(row(markdown, 'one')).toBe('| one<br>two |');
+  });
+});
+
 describe('Equivalents.fromHtml — source quirks', () => {
   it('inlines Google Sheets block divs inside cells', () => {
     const { simpleHtml, markdown } = fromHtml(

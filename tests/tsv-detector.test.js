@@ -57,6 +57,11 @@ describe('TsvDetector.detect', () => {
     expect(out.simpleHtml).toContain('<tbody><tr><td>Alice</td><td>30</td></tr></tbody>');
   });
 
+  it('keeps a cell with a pipe to one cell', () => {
+    const out = TsvDetector.detect({ hasHtml: false, plainText: 'Col\tB\na | b\t2' });
+    expect(out.markdown).toContain('| a \\| b | 2 |');
+  });
+
   describe('a cell holding markup', () => {
     // A spreadsheet column of HTML snippets. Both entries used to carry the
     // markup as markup: the Markdown was glued together from raw cell text,
