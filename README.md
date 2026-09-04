@@ -91,6 +91,7 @@ By contrast, if you copy with this library, it takes the **selected values** in 
 *   **ARIA tables**: Many sites no longer use traditional HTML `<table>` tags, but instead construct what looks like tables out of sophisticated HTML.
 *   **TSV tables**: When users copy a table, many websites will only give the clipboard tab-separated values. This library converts those into traditional tables for easier pasting.
 *   **Clipboard Inspector**: Want to see what's actually in your clipboard? Press `Ctrl`/`Cmd + Shift + O` to inspect clipboard contents.
+*   **Capture a test case**: One button in the inspector writes what you are looking at to a single HTML file — both views and every payload verbatim — to send to a collaborator or hand back as a regression fixture.
 *   **Local processing**: No data sent to an external service
 
 ## Usage
@@ -173,10 +174,25 @@ npm run test:e2e      # requires `npx playwright install chromium` once
 
 ### Reporting a bug → permanent regression
 
-1. Paste the URL or DOM into a chat with the agent and describe what's wrong.
-2. The agent saves it as `tests/regressions/YYYY-MM-DD-slug/input.html`.
-3. The agent writes `expected.md` (correct output) and fixes the code until the new fixture and every existing fixture passes.
-4. The fix and fixture are committed together; CI confirms on PR.
+1. Press `Ctrl`/`Cmd + Shift + O`, then **Capture**. One HTML file lands in Downloads holding both views and every payload verbatim.
+2. Fill in the Notes block at the top of that file, and send it.
+3. The agent takes `input.html` straight out of the capture and saves it as `tests/regressions/YYYY-MM-DD-slug/input.html`.
+4. The agent writes `expected.md` (correct output) and fixes the code until the new fixture and every existing fixture passes.
+5. The fix and fixture are committed together; CI confirms on PR.
+
+Step 1 replaces describing the copy in prose. Whitespace and line structure are what these bugs turn on, and both die in the retyping.
+
+### What a capture holds
+
+A capture is one self-contained HTML file. It opens in any browser and redraws the panes with the extension's own stylesheet, at the zoom and pane sizes the copy was seen at, so it stands in for a screenshot. Under that it carries each payload verbatim, and a hidden JSON block with the same payloads plus the source URL, the extension version and the platform.
+
+Read the JSON block, not the visible one, when a byte matters: an HTML parser folds a carriage return into a newline and drops one newline where a block starts, and JSON survives both.
+
+The file makes no network call when opened. It declares `script-src 'none'` and `img-src data:`, and a remote image in a payload has its URL moved aside so it stays readable without fetching — a capture is built to be shared, and a shared file should not tell the origin server who opened it.
+
+The split button saves everything by default. The caret opens a list for the times one pane is in the way; it is rebuilt on each open and remembers nothing.
+
+Not included: image entries from the clipboard. Their previews hang off object URLs that die with the tab.
 
 ### Capturing ARIA-grid reference fixtures
 

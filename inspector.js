@@ -503,6 +503,20 @@ function buildRightHeading() {
 
 /* --- clipboard cards (column 1) --- */
 
+/*
+ * The four card builders below hold an invariant capture.js depends on: each
+ * one returns a detached node, and none of them measures the document. That is
+ * what lets a capture draw both views by flipping state.view, calling all four,
+ * and putting the view back — no reflow, nothing written to the page, and the
+ * live grid untouched. Everything that does measure (fitPanesToWindow,
+ * computeFit, applyZoom) is reachable only from render(), which a capture never
+ * calls.
+ *
+ * A builder that grows a getBoundingClientRect or writes to #output-container
+ * breaks that quietly: the capture would still be produced, with the wrong
+ * sizes in it.
+ */
+
 function buildPlainCard() {
     const card = el('div', 'card card--clipboard card--plain');
 

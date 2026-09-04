@@ -3,6 +3,13 @@
 let lastAriaPreview = null;
 let pendingAriaPreviewResolve = null;
 
+// The page the copy came from, read off the tab when the inspect command ran.
+// The inspector page cannot work this out for itself — it opens in a tab of its
+// own and never sees the one the selection was made in — and a capture without
+// it is worth much less, since a fixture wants to say where the copy came from.
+// Cleared on read, the same way the aria snapshot is.
+let lastSourceUrl = null;
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'aria-preview') {
         // aria-preview.js finished scanning the page and sent its result.
@@ -17,6 +24,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         console.log('Background: Inspector requested aria-preview — responding with', lastAriaPreview ? 'data' : 'null', 'then clearing.');
         sendResponse(lastAriaPreview);
         lastAriaPreview = null;
+        return false;
+    }
+    if (msg.type === 'get-capture-context') {
+        // The capture control is asking where this copy came from.
+        console.log('Background: Capture requested the source URL — responding with', lastSourceUrl ? 'a URL' : 'null', 'then clearing.');
+        sendResponse({ sourceUrl: lastSourceUrl });
+        lastSourceUrl = null;
         return false;
     }
 });
@@ -63,6 +77,8 @@ chrome.commands.onCommand.addListener(async (command) => {
         } else {
             console.log('Background: Tab URL not injectable (chrome:// or extension page) — skipping aria-preview.');
         }
+
+        lastSourceUrl = tab?.url || null;
 
         console.log('Background: Opening inspector tab.');
         chrome.tabs.create({ url: chrome.runtime.getURL("inspector.html") });

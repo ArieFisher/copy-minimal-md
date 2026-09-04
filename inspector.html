@@ -52,6 +52,36 @@
         <button type="button" class="segment is-selected" data-view="rendered">Rendered</button>
         <button type="button" class="segment" data-view="source">Source</button>
       </div>
+
+      <div class="app-bar-divider" aria-hidden="true"></div>
+
+      <!-- A split control. The left half writes everything this copy has; the
+           caret opens the list, for the times one of them is in the way. The
+           list is built by capture-panel.js on every open and nothing is kept
+           between them, so this element ships empty. -->
+      <div class="capture" id="capture">
+        <div class="capture-split">
+          <button type="button" class="capture-btn" id="capture-btn">
+            <svg class="capture-glyph" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor"
+              stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M8 2v8" />
+              <path d="M4.5 7 8 10.5 11.5 7" />
+              <path d="M2.5 13h11" />
+            </svg>
+            <span id="capture-label">Capture</span>
+          </button>
+
+          <button type="button" class="capture-caret-btn" id="capture-caret" aria-haspopup="true"
+            aria-expanded="false" aria-controls="capture-menu" aria-label="Choose what to capture">
+            <svg class="capture-caret" viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor"
+              stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2.5 4.5 6 8l3.5-3.5" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="capture-menu" id="capture-menu" hidden></div>
+      </div>
     </div>
   </header>
 
@@ -69,6 +99,8 @@
   <script src="inline-style.js"></script>
   <script src="equivalents.js"></script>
   <script src="inspector.js"></script>
+  <script src="capture.js"></script>
+  <script src="capture-panel.js"></script>
 </body>
 
 </html>
