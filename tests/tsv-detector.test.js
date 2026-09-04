@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 let TsvDetector;
 
 beforeAll(() => {
+  // detect() builds a table and hands it to Equivalents, the same derivation
+  // every other source goes through. The adapter puts that global in place the
+  // way the extension's own script loading does.
+  require('./_adapter.js').fromHtml;
   TsvDetector = require('../tsv-detector.js');
 });
 
@@ -26,7 +30,7 @@ describe('TsvDetector.detect', () => {
   it('produces a markdown table for valid TSV', () => {
     const out = TsvDetector.detect({ hasHtml: false, plainText: 'Name\tAge\nAlice\t30\nBob\t25' });
     expect(out).not.toBeNull();
-    expect(out.markdown).toBe('| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bob | 25 |\n');
+    expect(out.markdown).toBe('| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bob | 25 |');
     expect(out.sourceType).toBe('Plain Text (TSV Conversion)');
   });
 
@@ -47,33 +51,32 @@ describe('TsvDetector.detect', () => {
     expect(out.markdown).toContain('| 1 | 2 |');
   });
 
-  describe('simpleHtml via marked', () => {
-    // The real page loads lib/marked.min.js as a global; stand in for it so the
-    // marked branch of detect() is exercised rather than the fallback builder.
-    beforeEach(() => {
-      globalThis.marked = {
-        parse: () =>
-          '<table>\n<thead>\n<tr>\n<th>Name</th>\n<th>Age</th>\n</tr>\n</thead>\n' +
-          '<tbody><tr>\n<td>Alice</td>\n<td>30</td>\n</tr>\n</tbody></table>\n'
-      };
+  it('keeps the header row as a header', () => {
+    const out = TsvDetector.detect({ hasHtml: false, plainText: 'Name\tAge\nAlice\t30' });
+    expect(out.simpleHtml).toContain('<thead><tr><th>Name</th><th>Age</th></tr></thead>');
+    expect(out.simpleHtml).toContain('<tbody><tr><td>Alice</td><td>30</td></tr></tbody>');
+  });
+
+  it('keeps a cell with a pipe to one cell', () => {
+    const out = TsvDetector.detect({ hasHtml: false, plainText: 'Col\tB\na | b\t2' });
+    expect(out.markdown).toContain('| a \\| b | 2 |');
+  });
+
+  describe('a cell holding markup', () => {
+    // A spreadsheet column of HTML snippets. Both entries used to carry the
+    // markup as markup: the Markdown was glued together from raw cell text,
+    // and the Simple HTML was that same Markdown rendered.
+    const TSV = 'Tag\tNote\n<table>\ta &amp; b';
+
+    it('writes the tag as text in the Markdown', () => {
+      const out = TsvDetector.detect({ hasHtml: false, plainText: TSV });
+      expect(out.markdown).toContain('| \\<table> | a \\&amp; b |');
     });
 
-    afterEach(() => {
-      delete globalThis.marked;
-    });
-
-    it('de-emphasises header cells without mangling <thead>', () => {
-      const out = TsvDetector.detect({ hasHtml: false, plainText: 'Name\tAge\nAlice\t30' });
-      expect(out.simpleHtml).toContain('<thead>');
-      expect(out.simpleHtml).not.toContain('"ead>');
-      expect(out.simpleHtml).toContain('<th style="font-weight: normal;">Name</th>');
-    });
-
-    it('keeps existing attributes when marked emits aligned headers', () => {
-      globalThis.marked = { parse: () => '<table>\n<thead>\n<tr>\n<th align="left">Name</th>\n</tr>\n</thead>\n</table>' };
-      const out = TsvDetector.detect({ hasHtml: false, plainText: 'Name\tAge\nAlice\t30' });
-      expect(out.simpleHtml).toContain('<thead>');
-      expect(out.simpleHtml).toContain('<th style="font-weight: normal;" align="left">');
+    it('writes the tag as text in the Simple HTML', () => {
+      const out = TsvDetector.detect({ hasHtml: false, plainText: TSV });
+      expect(out.simpleHtml).toContain('<td>&lt;table&gt;</td>');
+      expect(out.simpleHtml).toContain('<td>a &amp;amp; b</td>');
     });
   });
 });

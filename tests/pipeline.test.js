@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-const { htmlToEntries, htmlToMarkdown, htmlToSimpleHtml, gridToMarkdown, gridToSimpleHtml, fromHtml } = require('./_adapter.js');
+const { htmlToEntries, htmlToMarkdown, htmlToSimpleHtml, gridToEntries, gridToMarkdown, gridToSimpleHtml, fromHtml } = require('./_adapter.js');
 
 describe('Pipeline.htmlToMarkdown', () => {
   it('converts simple HTML to Markdown', () => {
@@ -76,6 +76,37 @@ describe('Pipeline.gridToMarkdown', () => {
   it('returns empty string for null/empty input', () => {
     expect(gridToMarkdown(null)).toBe('');
     expect(gridToMarkdown({ type: 'aria', tables: [] })).toBe('');
+    expect(gridToEntries(null)).toEqual({ markdown: '', simpleHtml: '' });
+  });
+
+  it('gives what the clipboard path gives for the same table', () => {
+    // The grid path used to run its own converter behind its own allowlist, so
+    // the same table said two different things depending on whether the page
+    // put HTML on the clipboard.
+    const t = document.createElement('table');
+    t.innerHTML = '<thead><tr><th>Source</th></tr></thead>'
+      + '<tbody><tr><td><a href="https://example.com">Report</a></td></tr></tbody>';
+
+    expect(gridToEntries({ type: 'aria', tables: [t] })).toEqual({
+      markdown: fromHtml(t.outerHTML).markdown,
+      simpleHtml: fromHtml(t.outerHTML).simpleHtml
+    });
+  });
+
+  it('keeps a link in a cell', () => {
+    const t = document.createElement('table');
+    t.innerHTML = '<thead><tr><th>Source</th></tr></thead>'
+      + '<tbody><tr><td><a href="https://example.com">Report</a></td></tr></tbody>';
+
+    expect(gridToMarkdown({ type: 'aria', tables: [t] })).toContain('[Report](https://example.com)');
+    expect(gridToSimpleHtml({ type: 'aria', tables: [t] })).toContain('href="https://example.com"');
+  });
+
+  it('writes a tag in a cell as text', () => {
+    const t = document.createElement('table');
+    t.innerHTML = '<thead><tr><th>Tag</th></tr></thead><tbody><tr><td>&lt;table&gt;</td></tr></tbody>';
+
+    expect(gridToMarkdown({ type: 'aria', tables: [t] })).toContain('| \\<table> |');
   });
 });
 

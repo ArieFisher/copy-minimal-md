@@ -49,10 +49,9 @@
     }
 
     /**
-     * The Simple HTML alone, for callers with no use for the Markdown: the
-     * cmd+shift+U path writes it straight into the clipboard's text/html. Sharing
-     * this with `fromHtml` is the point — what the inspector previews and what
-     * the hotkey writes are then the same derivation, and cannot drift apart.
+     * The Simple HTML alone, for a caller with no use for the Markdown. Shares
+     * every repair with `fromHtml`, so what this returns and what the full
+     * derivation returns cannot drift apart.
      */
     function toSimpleHtml(htmlText) {
         return simplifyTables(collapseContainers(nameEmptyLinksAndImages(sanitize(repair(htmlText).repaired))));
@@ -605,11 +604,74 @@
         return DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR, ALLOW_DATA_ATTR: false });
     }
 
+    /**
+     * Text a Markdown renderer would read as markup, escaped so it reads as
+     * the characters it is.
+     *
+     * Turndown escapes Markdown syntax and nothing else, so a cell whose text
+     * is a tag arrives in the Markdown as a working tag:
+     *
+     *     document text   <table>
+     *     Markdown        <table>     renders as an opening table
+     *     with this       \<table>    renders as the word
+     *
+     * An ampersand that closes as an entity goes the same way. A document
+     * holding the five characters &amp; spells them &amp;amp; in its source,
+     * which parses to the text &amp;; written out bare, the next renderer
+     * reads that as an entity and draws a single &. Escaped, it stays &amp;.
+     *
+     * Both rules are narrow on purpose. A < is escaped only when what follows
+     * could open a tag, a comment or an autolink, so 5 < 10 keeps its bare
+     * bracket. A > is never escaped: mid-line it is already literal, and
+     * Turndown escapes the line-leading one. An & is escaped only when what
+     * follows could close as an entity, so AT&T is left alone.
+     */
+    const OPENS_MARKUP = /<(?=[a-zA-Z/!?])/g;
+    const OPENS_ENTITY = /&(?=[a-zA-Z][a-zA-Z0-9]*;|#\d+;|#[xX][0-9a-fA-F]+;)/g;
+
+    function escapeMarkup(text) {
+        return text.replace(OPENS_ENTITY, '\\&').replace(OPENS_MARKUP, '\\<');
+    }
+
     function toMarkdown(cleanHtml) {
         const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
         if (typeof turndownPluginGfm !== 'undefined') {
             turndownService.use(turndownPluginGfm.gfm);
+
+            // A pipe in a cell ends that cell, so a cell carrying one comes out
+            // as two and the row runs wider than the table. GFM spells a pipe
+            // inside a cell `\|`, and that spelling holds inside a code span
+            // and a link destination as well.
+            //
+            // The escape goes here rather than in escapeMarkup because by this
+            // point the cell's content is finished: its text, its links and its
+            // code have all been written. Escaping text nodes alone would leave
+            // `ls | wc` in a code span and `?q=a|b` in a link splitting the row,
+            // since Turndown hands neither of those to its escape function.
+            //
+            // Everything else this does is what turndown-plugin-gfm's own cell
+            // rule does, and replaces it: the first cell of a row opens with a
+            // bar, and a newline inside a cell becomes the one line break a
+            // Markdown cell can carry. The delimiter row under the header is
+            // written by the plugin's row rule, which is left alone — it holds
+            // dashes.
+            turndownService.addRule('escapeCellPipes', {
+                filter: ['th', 'td'],
+                replacement: (content, node) => {
+                    const cells = Array.from(node.parentNode.childNodes);
+                    const prefix = cells.indexOf(node) === 0 ? '| ' : ' ';
+                    const escaped = content.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, '<br>');
+                    return prefix + escaped + ' |';
+                }
+            });
         }
+
+        // Runs after Turndown's own escapes, so the backslashes it adds are not
+        // doubled by the built-in backslash rule. Turndown skips text inside a
+        // code element, which is right: a code span is already literal, and a
+        // backslash there would show up in the code.
+        const escapeMarkdown = turndownService.escape.bind(turndownService);
+        turndownService.escape = text => escapeMarkup(escapeMarkdown(text));
 
         // A link label can't safely hold a literal blank line (CommonMark link
         // labels don't span one), so a run of block-level elements nested

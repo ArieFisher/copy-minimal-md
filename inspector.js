@@ -829,14 +829,12 @@ function buildExtraCard({ type, blob }) {
  * for the grid-selection work.
  */
 function buildAriaBypassCard(ariaPreview) {
-    if (typeof TurndownService === 'undefined') {
-        console.warn('Inspector (DOM Bypass): TurndownService not available.');
+    if (typeof Equivalents === 'undefined') {
+        console.warn('Inspector (DOM Bypass): Equivalents not available.');
         return null;
     }
 
-    const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-    if (typeof turndownPluginGfm !== 'undefined') td.use(turndownPluginGfm.gfm);
-    const markdown = td.turndown(ariaPreview.html);
+    const { markdown } = Equivalents.fromHtml(ariaPreview.html);
 
     const card = el('div', 'card card--experimental');
 

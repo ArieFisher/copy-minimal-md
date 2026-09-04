@@ -4,6 +4,20 @@
  * "TSV clipboard" = text/html absent AND text/plain looks like tab-separated values.
  * When detected, we produce the "simulated" outputs (markdown table + simple HTML table)
  * and fan them out to any registered listeners.
+ *
+ * `detect` builds the cells into a table with DOM methods and hands that table
+ * to `Equivalents.fromHtml`, the derivation every other source goes through.
+ * Two things follow. `textContent` escapes cell text as it writes it, so a
+ * spreadsheet cell holding a tag comes out as the tag's characters. And a
+ * spreadsheet copy says what a clipboard copy of the same table says, because
+ * one derivation produces both.
+ *
+ * Expected globals at call time:
+ *   - Equivalents  (equivalents.js)
+ *   - DOMParser    (browser global / jsdom)
+ *
+ * `tsv-detector.js` loads before `equivalents.js`, which costs nothing:
+ * `detect` runs long after every script is in place.
  */
 (function (global) {
     function detect({ hasHtml, plainText }) {
@@ -17,24 +31,7 @@
         if (tabCount === 0) return null;
 
         const headerCols = lines[0].split('\t');
-        let markdown = '';
-        markdown += '| ' + headerCols.join(' | ') + ' |\n';
-        markdown += '| ' + headerCols.map(() => '---').join(' | ') + ' |\n';
-        for (let i = 1; i < lines.length; i++) {
-            const rowCols = lines[i].split('\t');
-            while (rowCols.length < headerCols.length) rowCols.push('');
-            rowCols.length = headerCols.length;
-            markdown += '| ' + rowCols.join(' | ') + ' |\n';
-        }
-
-        let simpleHtml = '';
-        if (typeof marked !== 'undefined') {
-            // Match <th> and <th align="…"> but never <thead> — an unanchored
-            // /<th/ rewrites the opening <thead> into <th style="…"ead>.
-            simpleHtml = marked.parse(markdown).replace(/<th(\s|>)/gi, '<th style="font-weight: normal;"$1');
-        } else {
-            simpleHtml = buildSimpleHtml(headerCols, lines.slice(1));
-        }
+        const { markdown, simpleHtml } = Equivalents.fromHtml(buildTable(headerCols, lines.slice(1)));
 
         return {
             markdown,
@@ -44,21 +41,42 @@
         };
     }
 
-    function buildSimpleHtml(headerCols, rows) {
-        const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        let h = '<table>\n<thead>\n<tr>\n';
-        for (const c of headerCols) h += '<th style="font-weight: normal;">' + esc(c) + '</th>\n';
-        h += '</tr>\n</thead>\n<tbody>\n';
+    /**
+     * The cells as an HTML table: a header row from the first line, one body
+     * row per line after it. Short rows are padded to the header's width and
+     * long ones are cut to it, so every row has the same number of cells.
+     */
+    function buildTable(headerCols, rows) {
+        const doc = new DOMParser().parseFromString('<table></table>', 'text/html');
+        const table = doc.querySelector('table');
+
+        const thead = doc.createElement('thead');
+        const headRow = doc.createElement('tr');
+        for (const text of headerCols) {
+            const th = doc.createElement('th');
+            th.textContent = text;
+            headRow.appendChild(th);
+        }
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = doc.createElement('tbody');
         for (const row of rows) {
             const cols = row.split('\t');
             while (cols.length < headerCols.length) cols.push('');
             cols.length = headerCols.length;
-            h += '<tr>\n';
-            for (const c of cols) h += '<td>' + esc(c) + '</td>\n';
-            h += '</tr>\n';
+
+            const tr = doc.createElement('tr');
+            for (const text of cols) {
+                const td = doc.createElement('td');
+                td.textContent = text;
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
         }
-        h += '</tbody>\n</table>\n';
-        return h;
+        table.appendChild(tbody);
+
+        return table.outerHTML;
     }
 
     const listeners = [];
