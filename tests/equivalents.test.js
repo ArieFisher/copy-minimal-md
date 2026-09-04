@@ -103,6 +103,118 @@ describe('Equivalents.fromHtml — Markdown', () => {
   });
 });
 
+describe('Equivalents.fromHtml — text that reads as markup', () => {
+  // The copy that started this: a Google Doc table documenting the extension's
+  // own markup, one tag per cell. Every cell here is text. None of it is
+  // structure.
+  const TAGS_AS_TEXT =
+    '<table><tbody>' +
+    '<tr><td>&lt;table&gt;</td><td>&lt;table class="dr-ext-target-flash"&gt;</td></tr>' +
+    '<tr><td>&lt;td&gt;$ 320&lt;/td&gt;</td><td>&lt;td title="Original: $ 320"&gt;$300&lt;/td&gt;</td></tr>' +
+    '</tbody></table>';
+
+  it('writes a tag in a cell as text, not as a tag', () => {
+    const { markdown } = fromHtml(TAGS_AS_TEXT);
+
+    expect(markdown).toContain('| \\<table> | \\<table class="dr-ext-target-flash"> |');
+    expect(markdown).toContain('| \\<td>$ 320\\</td> | \\<td title="Original: $ 320">$300\\</td> |');
+  });
+
+  it('leaves the Simple HTML as it already was', () => {
+    // This entry was never wrong. It parses and re-serialises, and that write
+    // step spells an angle bracket in text as an entity.
+    const { simpleHtml } = fromHtml(TAGS_AS_TEXT);
+
+    expect(squash(simpleHtml)).toContain('<td>&lt;table&gt;</td>');
+    expect(squash(simpleHtml)).toContain('<td>&lt;td&gt;$ 320&lt;/td&gt;</td>');
+  });
+
+  it('keeps an entity in text an entity', () => {
+    // A document holding the five characters &amp; spells them &amp;amp;.
+    // Written out bare, the next renderer reads that as an entity and draws
+    // one &.
+    const { markdown } = fromHtml('<p>Write &amp;amp; for an ampersand.</p>');
+
+    expect(markdown).toBe('Write \\&amp; for an ampersand.');
+  });
+
+  it('leaves a bracket that opens nothing alone', () => {
+    const { markdown } = fromHtml('<p>5 &lt; 10, and a &lt; b, at AT&amp;T.</p>');
+
+    expect(markdown).toBe('5 < 10, and a < b, at AT&T.');
+  });
+
+  it('leaves code alone', () => {
+    // A code span is already literal, so a backslash there would show up in
+    // the code.
+    const { markdown } = fromHtml(
+      '<p>Use <code>&lt;br&gt;</code> here.</p><pre><code>&lt;div&gt;x&lt;/div&gt;</code></pre>'
+    );
+
+    expect(markdown).toContain('Use `<br>` here.');
+    expect(markdown).toContain('<div>x</div>');
+    expect(markdown).not.toContain('\\<');
+  });
+});
+
+describe('Equivalents.fromHtml — a pipe in a cell', () => {
+  // A pipe ends a cell, so a cell carrying one used to come out as two and the
+  // row ran wider than the table.
+  const row = (markdown, first) => markdown.split('\n').find((l) => l.startsWith(`| ${first}`));
+
+  it('keeps a cell with a pipe in its text to one cell', () => {
+    const { markdown } = fromHtml(
+      '<table><thead><tr><th>Col</th><th>B</th></tr></thead>' +
+      '<tbody><tr><td>a | b</td><td>2</td></tr></tbody></table>'
+    );
+
+    expect(row(markdown, 'a')).toBe('| a \\| b | 2 |');
+  });
+
+  it('keeps a cell with a pipe in a link to one cell', () => {
+    // The pipe is in an attribute, so escaping text nodes would never see it.
+    const { markdown } = fromHtml(
+      '<table><thead><tr><th>Q</th></tr></thead>' +
+      '<tbody><tr><td><a href="https://x.test/?q=a|b">go</a></td></tr></tbody></table>'
+    );
+
+    expect(row(markdown, '[go]')).toBe('| [go](https://x.test/?q=a\\|b) |');
+  });
+
+  it('keeps a cell with a pipe in code to one cell', () => {
+    // Turndown hands code text straight through without escaping it.
+    const { markdown } = fromHtml(
+      '<table><thead><tr><th>Cmd</th></tr></thead>' +
+      '<tbody><tr><td><code>ls | wc</code></td></tr></tbody></table>'
+    );
+
+    expect(row(markdown, '`ls')).toBe('| `ls \\| wc` |');
+  });
+
+  it('leaves the delimiter row alone', () => {
+    const { markdown } = fromHtml(
+      '<table><thead><tr><th>Col</th><th>B</th></tr></thead>' +
+      '<tbody><tr><td>a | b</td><td>2</td></tr></tbody></table>'
+    );
+
+    expect(markdown).toContain('| --- | --- |');
+  });
+
+  it('leaves a pipe in prose bare', () => {
+    // Outside a table a pipe is an ordinary character.
+    expect(fromHtml('<p>Run a | b in the shell.</p>').markdown).toBe('Run a | b in the shell.');
+  });
+
+  it('still writes a cell line break', () => {
+    const { markdown } = fromHtml(
+      '<table><thead><tr><th>H</th></tr></thead>' +
+      '<tbody><tr><td><div>one</div><div>two</div></td></tr></tbody></table>'
+    );
+
+    expect(row(markdown, 'one')).toBe('| one<br>two |');
+  });
+});
+
 describe('Equivalents.fromHtml — source quirks', () => {
   it('inlines Google Sheets block divs inside cells', () => {
     const { simpleHtml, markdown } = fromHtml(

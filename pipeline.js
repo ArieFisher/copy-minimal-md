@@ -5,12 +5,9 @@
  * can be unit/regression tested directly (no clipboard, no DOM injection).
  *
  * Exports `window.Pipeline = { htmlToEntries, htmlToMarkdown, htmlToSimpleHtml,
- * gridToMarkdown, gridToSimpleHtml }`.
+ * gridToEntries, gridToMarkdown, gridToSimpleHtml }`.
  *
  * Expected globals at call time:
- *   - DOMPurify        (lib/purify.min.js)
- *   - TurndownService  (lib/turndown.js)
- *   - turndownPluginGfm (lib/turndown-plugin-gfm.js)
  *   - Equivalents      (equivalents.js — the derivation both entries come from)
  *   - DOMParser        (browser global / jsdom)
  *
@@ -19,7 +16,7 @@
  *   2. htmlToEntries(html, { gridResult }) returns both clipboard entries.
  *
  * When there is no `text/html` clipboard payload but `gridResult` reconstructed
- * a table, call `gridToMarkdown` / `gridToSimpleHtml` instead.
+ * a table, call `gridToEntries` instead.
  *
  * Every copy has two entries, not just a table: the Markdown goes to text/plain
  * and the Simple HTML to text/html, so a paste into a rich-text editor lands the
@@ -29,8 +26,6 @@
  */
 (function (global) {
     if (global.Pipeline) return;
-
-    const GRID_ALLOWED_TAGS = ['table','thead','tbody','tr','th','td'];
 
     /**
      * Fold the DOM-extracted grid into the clipboard document: swap jagged native
@@ -116,25 +111,34 @@
         return htmlToEntries(htmlText, opts).simpleHtml;
     }
 
+    /**
+     * Both clipboard entries for the path where the table came straight from
+     * the DOM, because the clipboard carried no HTML to work from.
+     *
+     * A table read off the page is HTML like any other source, so it goes
+     * through `Equivalents.fromHtml` — the same sanitize allowlist, the same
+     * converter, the same escapes. A grid copy and a clipboard copy of the
+     * same table then say the same thing.
+     */
+    function gridToEntries(gridResult) {
+        if (!gridResult || !gridResult.tables || !gridResult.tables[0]) {
+            return { markdown: '', simpleHtml: '' };
+        }
+        const { markdown, simpleHtml } = Equivalents.fromHtml(gridResult.tables[0].outerHTML);
+        return { markdown, simpleHtml: simpleHtml.trim() ? simpleHtml : '' };
+    }
+
+    /** The text/plain entry on its own, for the grid path. */
     function gridToMarkdown(gridResult) {
-        if (!gridResult || !gridResult.tables || !gridResult.tables[0]) return '';
-        const cleanHtml = DOMPurify.sanitize(gridResult.tables[0].outerHTML, {
-            ALLOWED_TAGS: GRID_ALLOWED_TAGS,
-            ALLOWED_ATTR: [],
-            ALLOW_DATA_ATTR: false
-        });
-        const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-        td.use(turndownPluginGfm.gfm);
-        return td.turndown(cleanHtml);
+        return gridToEntries(gridResult).markdown;
     }
 
-    /** Simple HTML for the path where the table came straight from the DOM. */
+    /** The text/html entry on its own, for the grid path. */
     function gridToSimpleHtml(gridResult) {
-        if (!gridResult || !gridResult.tables || !gridResult.tables[0]) return '';
-        return Equivalents.toSimpleHtml(gridResult.tables[0].outerHTML);
+        return gridToEntries(gridResult).simpleHtml;
     }
 
-    global.Pipeline = { htmlToEntries, htmlToMarkdown, htmlToSimpleHtml, gridToMarkdown, gridToSimpleHtml };
+    global.Pipeline = { htmlToEntries, htmlToMarkdown, htmlToSimpleHtml, gridToEntries, gridToMarkdown, gridToSimpleHtml };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) {
