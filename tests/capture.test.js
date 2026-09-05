@@ -342,10 +342,47 @@ describe('buildDocument', () => {
         expect(build().startsWith('<!DOCTYPE html>')).toBe(true);
     });
 
-    it('carries the notes fields a fixture wants filling in', () => {
-        const text = parse(build()).querySelector('.capture-notes').textContent;
-        for (const field of ['Reported', 'Source', 'Observed', 'Cause', 'Expected']) {
-            expect(text).toContain(field);
-        }
+    describe('notes', () => {
+        const terms = (html) =>
+            [...parse(html).querySelectorAll('.capture-notes dt')].map((dt) => dt.textContent);
+
+        const values = (html) =>
+            [...parse(html).querySelectorAll('.capture-notes dd')].map((dd) => dd.textContent);
+
+        it('asks for three fields, in the order a tester fills them', () => {
+            expect(terms(build())).toEqual(['Expected', 'Observed', 'Cause']);
+        });
+
+        it('leaves out what the header already records', () => {
+            expect(terms(build())).not.toContain('Reported');
+            expect(terms(build())).not.toContain('Source');
+        });
+
+        it('writes what was typed', () => {
+            const html = build({ notes: { expected: 'a table', observed: 'one long line' } });
+            expect(values(html)).toEqual(['a table', 'one long line', '']);
+        });
+
+        it('marks a filled field so it reads as prose and not as a blank rule', () => {
+            const doc = parse(build({ notes: { observed: 'one long line' } }));
+            const [expected, observed] = doc.querySelectorAll('.capture-notes dd');
+            expect(expected.className).toBe('');
+            expect(observed.className).toBe('is-filled');
+        });
+
+        it('keeps the blank rule for a field left empty or blank', () => {
+            const doc = parse(build({ notes: { expected: '   ', observed: '' } }));
+            for (const dd of doc.querySelectorAll('.capture-notes dd')) {
+                expect(dd.textContent).toBe('');
+                expect(dd.className).toBe('');
+            }
+        });
+
+        it('escapes a note rather than letting it become markup', () => {
+            const doc = parse(build({ notes: { cause: '<img src=x onerror=alert(1)>' } }));
+            const dd = doc.querySelectorAll('.capture-notes dd')[2];
+            expect(dd.querySelector('img')).toBe(null);
+            expect(dd.textContent).toBe('<img src=x onerror=alert(1)>');
+        });
     });
 });

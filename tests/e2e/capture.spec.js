@@ -258,7 +258,7 @@ test('saves only what is left ticked', async ({ context, server, extensionId }) 
     expect(html).not.toContain('id="view-source"');
 });
 
-test('keeps nothing between one save and the next', async ({ context, server, extensionId }) => {
+test('keeps no tick between one save and the next', async ({ context, server, extensionId }) => {
     const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
 
     await page.locator('#capture-caret').click();
@@ -268,4 +268,56 @@ test('keeps nothing between one save and the next', async ({ context, server, ex
     // Reopening gives a panel built from the copy, not from the last visit.
     await page.locator('#capture-caret').click();
     expect(await page.locator('#capture-menu .capture-row input:checked').count()).toBe(10);
+});
+
+/* ------------------------------------------------------------------ notes */
+
+test('takes the three notes in the panel and writes them into the file', async ({ context, server, extensionId }) => {
+    const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
+
+    await page.locator('#capture-caret').click();
+
+    const fields = page.locator('#capture-menu .capture-field');
+    await expect(fields.locator('.capture-field-name')).toHaveText(['Expected', 'Observed', 'Cause']);
+
+    await fields.nth(0).locator('textarea').fill('a table with two rows');
+    await fields.nth(1).locator('textarea').fill('one long line');
+    await fields.nth(2).locator('textarea').fill('the wrapper div is dropped');
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.locator('#capture-menu .capture-save').click()
+    ]);
+    const file = await keep(download);
+
+    // Read it back the way a reader and an importer each would.
+    const reader = await context.newPage();
+    await reader.goto(`file://${file}`);
+
+    await expect(reader.locator('.capture-notes dt')).toHaveText(['Expected', 'Observed', 'Cause']);
+    await expect(reader.locator('.capture-notes dd')).toHaveText([
+        'a table with two rows', 'one long line', 'the wrapper div is dropped'
+    ]);
+
+    const data = JSON.parse(await reader.locator('#capture-payloads').textContent());
+    expect(data.notes).toEqual({
+        expected: 'a table with two rows',
+        observed: 'one long line',
+        cause: 'the wrapper div is dropped'
+    });
+});
+
+test('keeps the notes across a close, and the left half writes them too', async ({ context, server, extensionId }) => {
+    const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
+
+    await page.locator('#capture-caret').click();
+    await page.locator('#capture-menu .capture-field textarea').first().fill('a table with two rows');
+    await page.keyboard.press('Escape');
+
+    await page.locator('#capture-caret').click();
+    await expect(page.locator('#capture-menu .capture-field textarea').first())
+        .toHaveValue('a table with two rows');
+    await page.keyboard.press('Escape');
+
+    expect((await capture(page)).html).toContain('a table with two rows');
 });

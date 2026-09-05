@@ -9,8 +9,11 @@
  *
  * The control is a split button. The left half saves everything this copy has.
  * The caret opens a panel with every available box ticked, for the times one of
- * them is in the way. The panel is rebuilt on each open and nothing is kept
+ * them is in the way. The panel is rebuilt on each open and no tick is kept
  * between them: unticking trims one save, and the next panel is full again.
+ *
+ * The notes are the exception. They are the tester's own words, so they last as
+ * long as the tab and both halves of the button write them.
  */
 (function () {
     'use strict';
@@ -33,6 +36,32 @@
     };
 
     const VIEWS = ['rendered', 'source'];
+
+    /* ---------------------------------------------------------------- notes */
+
+    /**
+     * What the tester has typed, keyed the way Capture.NOTES_FIELDS names it.
+     *
+     * Reported and Source are not asked for. The header of the saved file
+     * already carries the capture time and the page the copy came from.
+     */
+    const notes = {};
+
+    const NOTE_HINT = {
+        expected: 'What the copy should have produced.',
+        observed: 'What it produced instead.',
+        cause: 'Where it goes wrong, if you know yet.'
+    };
+
+    /** Only what was typed. An untouched field is absent, not empty. */
+    function notesFor() {
+        const filled = {};
+        for (const field of Capture.NOTES_FIELDS) {
+            const text = (notes[field.key] || '').trim();
+            if (text) filled[field.key] = text;
+        }
+        return filled;
+    }
 
     const textFor = (key) => ({
         plain: state.current.plain,
@@ -229,6 +258,7 @@
             present: { plain: state.plainPresent, html: state.htmlPresent },
             replaced: { plain: state.mdDone, html: state.htmlDone },
             derivedFrom: meta.derivedFrom,
+            notes: notesFor(),
             payloads: {},
             equivalents: {}
         };
@@ -266,6 +296,7 @@
                 sections,
                 payloads: payloadsFor(keys),
                 data: dataFor(keys, meta),
+                notes: notesFor(),
                 inspectorCss: sheets.inspector,
                 reportCss: sheets.report
             })
@@ -323,7 +354,10 @@
                     ? byteLength(textFor(key)) + PANE_CHROME
                     : 0), 0), 0);
 
-        return sheets + REPORT_CHROME + payloads + panes;
+        const written = Object.values(notesFor())
+            .reduce((total, text) => total + byteLength(text), 0) * 2;
+
+        return sheets + REPORT_CHROME + payloads + panes + written;
     }
 
     function row(label, checked, disabled, why, wire) {
@@ -340,6 +374,30 @@
         if (why) label_.appendChild(el('span', 'capture-why', why));
 
         return { node: label_, box };
+    }
+
+    /**
+     * One note field, restored from what the tester has already typed.
+     *
+     * A textarea rather than an input: a cause runs to a sentence or two, and a
+     * single line that scrolls sideways hides what is already written.
+     */
+    function noteField(field, changed) {
+        const wrap = el('label', 'capture-field');
+        wrap.appendChild(el('span', 'capture-field-name', field.label));
+
+        const input = document.createElement('textarea');
+        input.className = 'capture-field-input';
+        input.rows = 3;
+        input.value = notes[field.key] || '';
+        input.placeholder = NOTE_HINT[field.key] || '';
+        input.addEventListener('input', () => {
+            notes[field.key] = input.value;
+            changed();
+        });
+        wrap.appendChild(input);
+
+        return wrap;
     }
 
     function cardLabel(key) {
@@ -384,6 +442,11 @@
                 selection.url = event.target.checked;
             });
         menu.appendChild(urlRow.node);
+
+        menu.appendChild(el('div', 'capture-group', 'Notes'));
+        for (const field of Capture.NOTES_FIELDS) {
+            menu.appendChild(noteField(field, refresh));
+        }
 
         const foot = el('div', 'capture-foot');
         els.size = el('span', 'capture-size');
