@@ -225,10 +225,19 @@
         'machine-readable copy of every payload is in a hidden block with the id capture-payloads, ' +
         'as JSON.';
 
-    const NOTES_HINT = 'Fill these in before sending. They are the fields a regression ' +
-        'fixture’s notes file wants.';
+    const NOTES_HINT = 'The fields a regression fixture’s notes file wants, as they were ' +
+        'typed into the capture panel. A blank rule is one nobody filled in.';
 
-    const NOTES_FIELDS = ['Reported', 'Source', 'Observed', 'Cause', 'Expected'];
+    /**
+     * The three fields a capture cannot work out for itself. Reported and Source
+     * are not among them: the header above already carries the capture time and
+     * the page the copy came from.
+     */
+    const NOTES_FIELDS = [
+        { key: 'expected', label: 'Expected' },
+        { key: 'observed', label: 'Observed' },
+        { key: 'cause', label: 'Cause' }
+    ];
 
     /** The inspector's own el(), against an arbitrary document. */
     function elem(doc, tag, className, text) {
@@ -253,7 +262,7 @@
      * `sections` are `{ id, view, node }`, the node being a ready grid.
      * `payloads` are `{ id, entry, label, kind, size, text }`.
      */
-    function buildDocument({ meta, sections, payloads, data, inspectorCss, reportCss }) {
+    function buildDocument({ meta, sections, payloads, data, notes, inspectorCss, reportCss }) {
         const doc = document.implementation.createHTMLDocument(TITLE);
         doc.head.textContent = '';
 
@@ -300,16 +309,17 @@
         header.appendChild(facts);
         page.appendChild(header);
 
-        const notes = elem(doc, 'section', 'capture-notes');
-        notes.appendChild(elem(doc, 'h2', 'capture-notes-title', 'Notes'));
-        notes.appendChild(elem(doc, 'p', 'capture-notes-hint', NOTES_HINT));
+        const notesBox = elem(doc, 'section', 'capture-notes');
+        notesBox.appendChild(elem(doc, 'h2', 'capture-notes-title', 'Notes'));
+        notesBox.appendChild(elem(doc, 'p', 'capture-notes-hint', NOTES_HINT));
         const notesList = elem(doc, 'dl');
         for (const field of NOTES_FIELDS) {
-            notesList.appendChild(elem(doc, 'dt', null, field));
-            notesList.appendChild(elem(doc, 'dd', null, ''));
+            const value = ((notes && notes[field.key]) || '').trim();
+            notesList.appendChild(elem(doc, 'dt', null, field.label));
+            notesList.appendChild(elem(doc, 'dd', value ? 'is-filled' : null, value));
         }
-        notes.appendChild(notesList);
-        page.appendChild(notes);
+        notesBox.appendChild(notesList);
+        page.appendChild(notesBox);
 
         for (const section of sections) {
             page.appendChild(elem(doc, 'h2', 'capture-view-title', VIEW_TITLE[section.view]));
@@ -364,6 +374,7 @@
         CAPTURE_CSP,
         CARD_KEYS,
         CARD_LABEL,
+        NOTES_FIELDS,
         WHY,
         hostSlug,
         dateSlug,

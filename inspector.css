@@ -377,6 +377,11 @@ body {
   border: 1px solid var(--border-neutral);
   border-radius: 12px;
   box-shadow: 0 10px 26px rgba(60, 50, 20, 0.2);
+  /* The note fields make this taller than the zoom menu ever was. A short
+     window gets a panel that scrolls rather than one running off the bottom
+     with Save below the fold. */
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
 }
 
 .capture-menu[hidden] {
@@ -449,6 +454,47 @@ body {
 
 .capture-row.is-off:hover {
   background: none;
+}
+
+/* The three fields a capture cannot work out for itself. A textarea and not an
+   input: a cause runs to a sentence or two, and a single line that scrolls
+   sideways hides what is already written. */
+.capture-field {
+  display: block;
+  padding: 3px 8px 6px;
+}
+
+.capture-field-name {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.capture-field-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  background: var(--page-bg);
+  border: 1px solid var(--border-neutral);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.capture-field-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.capture-field-input:focus {
+  outline: 2px solid var(--action);
+  outline-offset: -1px;
+  border-color: transparent;
 }
 
 .capture-foot {

@@ -107,6 +107,15 @@
   min-height: 1.3em;
 }
 
+/* Typed at capture time. It reads as prose, keeps the line breaks it was
+   written with, and drops the rule that was there to be written on. */
+.capture-notes dd.is-filled {
+  color: var(--text-primary);
+  border-bottom: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* -------------------------------------------------------------- view rows */
 
 .capture-view-title,
