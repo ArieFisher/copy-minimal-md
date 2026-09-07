@@ -34,7 +34,7 @@
     'use strict';
 
     /** Rows kept. Older ones fall off the front and are counted. */
-    const LIMIT = 500;
+    const LIMIT = 50;
 
     /** Characters kept per row, and per argument inside it. */
     const ROW_CHARS = 2000;

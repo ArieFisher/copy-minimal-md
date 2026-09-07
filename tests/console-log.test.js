@@ -183,6 +183,19 @@ describe('the buffer', () => {
         expect(snap.limit).toBe(3);
     });
 
+    it('ships a cap of 50 rows', () => {
+        // The figure a capture carries, pinned so it cannot drift unnoticed.
+        expect(ConsoleLog.LIMIT).toBe(50);
+
+        const { fake, rec } = recorder();
+        for (let i = 1; i <= 60; i += 1) fake.log(`row ${i}`);
+
+        const snap = rec.snapshot();
+        expect(snap.entries).toHaveLength(50);
+        expect(snap.entries[0].text).toBe('row 11');
+        expect(snap.dropped).toBe(10);
+    });
+
     it('hands out copies, so a reader cannot rewrite the log', () => {
         const { fake, rec } = recorder();
         fake.log('original');
