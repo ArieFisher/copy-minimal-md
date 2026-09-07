@@ -14,6 +14,10 @@
  *
  * The notes are the exception. They are the tester's own words, so they last as
  * long as the tab and both halves of the button write them.
+ *
+ * The console log is the other exception, and a firmer one: it has no box at
+ * all. Every save carries what the page logged, because the row that explains a
+ * bad copy is the row nobody thought to tick.
  */
 (function () {
     'use strict';
@@ -61,6 +65,23 @@
             if (text) filled[field.key] = text;
         }
         return filled;
+    }
+
+    /* -------------------------------------------------------------- console */
+
+    /**
+     * What the page has logged so far.
+     *
+     * Read at save time, not at panel time: the rows that matter are often the
+     * ones written between opening the panel and pressing the button. A missing
+     * recorder gives an empty log rather than a failed capture.
+     */
+    function consoleLog() {
+        try {
+            return ConsoleLog.snapshot();
+        } catch (err) {
+            return { entries: [], dropped: 0 };
+        }
     }
 
     const textFor = (key) => ({
@@ -297,6 +318,7 @@
                 payloads: payloadsFor(keys),
                 data: dataFor(keys, meta),
                 notes: notesFor(),
+                consoleLog: consoleLog(),
                 inspectorCss: sheets.inspector,
                 reportCss: sheets.report
             })
@@ -330,6 +352,13 @@
     /** What the report's own header, notes and section titles come to. */
     const REPORT_CHROME = 4000;
 
+    /** A console row's markup, over and above the text in it. */
+    const LOG_ROW_CHROME = 170;
+
+    /** The log, counted twice: once as rows to read, once as JSON. */
+    const logSize = (log) =>
+        log.entries.reduce((total, entry) => total + byteLength(entry.text) * 2 + LOG_ROW_CHROME, 0);
+
     /**
      * A rough figure for what pressing Save writes, shown before it is written
      * rather than after.
@@ -357,7 +386,7 @@
         const written = Object.values(notesFor())
             .reduce((total, text) => total + byteLength(text), 0) * 2;
 
-        return sheets + REPORT_CHROME + payloads + panes + written;
+        return sheets + REPORT_CHROME + payloads + panes + written + logSize(consoleLog());
     }
 
     function row(label, checked, disabled, why, wire) {
@@ -442,6 +471,16 @@
                 selection.url = event.target.checked;
             });
         menu.appendChild(urlRow.node);
+
+        // No box: the log goes in whatever else is ticked. The row is here to
+        // say so, and to show how much of it there is.
+        const log = consoleLog();
+        const always = el('div', 'capture-always');
+        always.appendChild(el('span', null, 'Console'));
+        always.appendChild(el('span', 'capture-why', log.entries.length
+            ? `${log.entries.length} ${log.entries.length === 1 ? 'message' : 'messages'}, always saved`
+            : 'nothing logged yet, saved anyway'));
+        menu.appendChild(always);
 
         menu.appendChild(el('div', 'capture-group', 'Notes'));
         for (const field of Capture.NOTES_FIELDS) {

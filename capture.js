@@ -48,6 +48,12 @@
  * element is raw text: a payload holding an end-script tag would escape it and
  * need hand-escaping, which is the failure part 4 exists to rule out. It also
  * keeps the word script out of a file whose selling point is having none.
+ *
+ * THE CONSOLE RIDES ALONG
+ *
+ * Every capture carries what the page logged, recorded by console-log.js. There
+ * is no selection for it and no empty case: a run that logged nothing says so,
+ * because "nothing was logged" is itself a finding.
  */
 (function (global) {
     'use strict';
@@ -222,11 +228,20 @@
         'take the payloads out of the JSON at the end of this file instead. It survives both.';
 
     const FOOT_NOTE = 'This file carries no script and declares a policy forbidding one. The ' +
-        'machine-readable copy of every payload is in a hidden block with the id capture-payloads, ' +
-        'as JSON.';
+        'machine-readable copy of every payload, and of the console rows above, is in a hidden ' +
+        'block with the id capture-payloads, as JSON.';
 
     const NOTES_HINT = 'The fields a regression fixture’s notes file wants, as they were ' +
         'typed into the capture panel. A blank rule is one nobody filled in.';
+
+    const CONSOLE_HINT = 'What the inspector page logged, in the order it logged it, up to the ' +
+        'moment Save was pressed. The service worker and the content script log elsewhere and are ' +
+        'not here. An indented row sat inside a group; a long argument is cut and marked.';
+
+    const CONSOLE_EMPTY = 'Nothing was logged.';
+
+    /** Two spaces a level, which is what a console draws a group as. */
+    const INDENT = '  ';
 
     /**
      * The three fields a capture cannot work out for itself. Reported and Source
@@ -238,6 +253,16 @@
         { key: 'observed', label: 'Observed' },
         { key: 'cause', label: 'Cause' }
     ];
+
+    /**
+     * `15:59:40.893` out of an ISO stamp, which is what a console shows and what
+     * reads against the capture time in the header above. Anything that is not
+     * an ISO stamp goes through as it stands.
+     */
+    function clockOf(at) {
+        const text = String(at || '');
+        return /^\d{4}-\d{2}-\d{2}T/.test(text) ? text.slice(11, 23) : text;
+    }
 
     /** The inspector's own el(), against an arbitrary document. */
     function elem(doc, tag, className, text) {
@@ -254,6 +279,54 @@
     }
 
     /**
+     * The console section. Written into every capture, empty or not.
+     *
+     * A row is a time, a level and the text, and the text sits in a pre because
+     * a stack trace is lines. Depth becomes leading spaces rather than a style:
+     * a reader copying a row out of the file gets the nesting with it.
+     */
+    function consoleSection(doc, log) {
+        const entries = (log && log.entries) || [];
+        const dropped = (log && log.dropped) || 0;
+
+        const section = elem(doc, 'section', 'capture-console');
+        section.id = 'capture-console';
+        section.appendChild(elem(doc, 'h2', 'capture-console-title', 'Console'));
+        section.appendChild(elem(doc, 'p', 'capture-console-hint', CONSOLE_HINT));
+
+        if (dropped) {
+            section.appendChild(elem(doc, 'p', 'capture-console-dropped',
+                `${dropped} earlier ${dropped === 1 ? 'message' : 'messages'} dropped: the buffer keeps the last ${entries.length}.`));
+        }
+
+        if (!entries.length) {
+            section.appendChild(elem(doc, 'p', 'capture-console-empty', CONSOLE_EMPTY));
+            return section;
+        }
+
+        const list = elem(doc, 'div', 'capture-log');
+        for (const entry of entries) {
+            const level = entry.level || 'log';
+            const row = elem(doc, 'div', `capture-log-row is-${level}`);
+            row.setAttribute('data-level', level);
+            if (entry.depth) row.setAttribute('data-depth', String(entry.depth));
+
+            row.appendChild(elem(doc, 'span', 'capture-log-time', clockOf(entry.at)));
+            row.appendChild(elem(doc, 'span', 'capture-log-level', level));
+
+            const text = elem(doc, 'pre', 'capture-log-text');
+            // The parser eats one newline where a pre starts. Feed it a spare.
+            text.textContent = `\n${INDENT.repeat(entry.depth || 0)}${entry.text || ''}`;
+            row.appendChild(text);
+
+            list.appendChild(row);
+        }
+        section.appendChild(list);
+
+        return section;
+    }
+
+    /**
      * Assemble the capture and serialise it.
      *
      * Pure: takes nodes and plain data, reads no global state, so a test can
@@ -261,8 +334,11 @@
      *
      * `sections` are `{ id, view, node }`, the node being a ready grid.
      * `payloads` are `{ id, entry, label, kind, size, text }`.
+     * `consoleLog` is `{ entries, dropped }` off console-log.js. It is written
+     * into the page and into the JSON here rather than by the caller, so no
+     * caller can leave it out.
      */
-    function buildDocument({ meta, sections, payloads, data, notes, inspectorCss, reportCss }) {
+    function buildDocument({ meta, sections, payloads, data, notes, consoleLog, inspectorCss, reportCss }) {
         const doc = document.implementation.createHTMLDocument(TITLE);
         doc.head.textContent = '';
 
@@ -358,10 +434,16 @@
             page.appendChild(blocks);
         }
 
+        page.appendChild(consoleSection(doc, consoleLog));
+
         page.appendChild(elem(doc, 'p', 'capture-foot-note', FOOT_NOTE));
         doc.body.appendChild(page);
 
-        const island = elem(doc, 'pre', null, JSON.stringify(data, null, 2));
+        const log = {
+            entries: (consoleLog && consoleLog.entries) || [],
+            dropped: (consoleLog && consoleLog.dropped) || 0
+        };
+        const island = elem(doc, 'pre', null, JSON.stringify({ ...data, console: log }, null, 2));
         island.id = 'capture-payloads';
         island.hidden = true;
         doc.body.appendChild(island);
@@ -382,6 +464,7 @@
         suggestedSlug,
         availability,
         scrub,
+        clockOf,
         buildDocument
     };
 })(typeof window !== 'undefined' ? window : globalThis);
