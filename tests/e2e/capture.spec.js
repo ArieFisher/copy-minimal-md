@@ -321,3 +321,68 @@ test('keeps the notes across a close, and the left half writes them too', async 
 
     expect((await capture(page)).html).toContain('a table with two rows');
 });
+
+/* ---------------------------------------------------------------- console */
+
+test('carries what the page logged, with no box to tick', async ({ context, server, extensionId }) => {
+    const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
+
+    // Something the inspector logs on every load, so the assertion is about the
+    // recorder and not about a message this test planted.
+    const { path, html } = await capture(page);
+    expect(html).toContain('id="capture-console"');
+    expect(html).toContain('Requesting aria-preview data from background');
+
+    const reader = await context.newPage();
+    await reader.goto(`file://${path}`);
+
+    const rows = reader.locator('.capture-log-row');
+    expect(await rows.count()).toBeGreaterThan(0);
+    await expect(rows.first().locator('.capture-log-time')).toHaveText(/^\d{2}:\d{2}:\d{2}\.\d{3}$/);
+
+    const data = JSON.parse(await reader.locator('#capture-payloads').textContent());
+    expect(data.console.dropped).toBe(0);
+    expect(data.console.entries.map((entry) => entry.text).join('\n'))
+        .toContain('Requesting aria-preview data from background');
+});
+
+test('says the log is coming and how much of it there is', async ({ context, server, extensionId }) => {
+    const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
+
+    await page.locator('#capture-caret').click();
+    const always = page.locator('#capture-menu .capture-always');
+    await expect(always).toContainText('Console');
+    await expect(always).toContainText(/\d+ messages?, always saved/);
+
+    // It has no box, so unticking everything else still leaves it in the file.
+    for (const box of await page.locator('#capture-menu .capture-row input:enabled').all()) {
+        await box.uncheck();
+    }
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.locator('#capture-menu .capture-save').click()
+    ]);
+    const html = fs.readFileSync(await keep(download), 'utf8');
+
+    expect(html).not.toContain('id="view-rendered"');
+    expect(html).not.toContain('id="payload-text-plain"');
+    expect(html).toContain('id="capture-console"');
+    expect(html).toContain('Requesting aria-preview data from background');
+});
+
+test('records a message written after the panel was opened', async ({ context, server, extensionId }) => {
+    const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
+
+    await page.locator('#capture-caret').click();
+    await page.evaluate(() => console.warn('Inspector: something the tester did next'));
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.locator('#capture-menu .capture-save').click()
+    ]);
+    const html = fs.readFileSync(await keep(download), 'utf8');
+
+    expect(html).toContain('Inspector: something the tester did next');
+    expect(html).toContain('is-warn');
+});

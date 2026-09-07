@@ -385,4 +385,105 @@ describe('buildDocument', () => {
             expect(dd.textContent).toBe('<img src=x onerror=alert(1)>');
         });
     });
+
+    describe('the console', () => {
+        const row = (text, over = {}) =>
+            ({ at: '2026-09-04T14:32:10.514Z', level: 'log', depth: 0, text, ...over });
+
+        const withLog = (consoleLog) => parse(build({ consoleLog }));
+
+        const rows = (doc) => [...doc.querySelectorAll('.capture-log-row')];
+
+        const island = (doc) => JSON.parse(doc.getElementById('capture-payloads').textContent);
+
+        it('writes the section into a capture that was given no log at all', () => {
+            const doc = parse(build());
+            expect(doc.getElementById('capture-console')).not.toBeNull();
+            expect(doc.querySelector('.capture-console-empty').textContent).toBe('Nothing was logged.');
+        });
+
+        it('says so when the page logged nothing, rather than leaving a gap', () => {
+            const doc = withLog({ entries: [], dropped: 0 });
+            expect(rows(doc)).toHaveLength(0);
+            expect(doc.querySelector('.capture-console-empty')).not.toBeNull();
+        });
+
+        it('writes a row per message, with its time, level and text', () => {
+            const doc = withLog({
+                entries: [
+                    row('Inspector: reading the clipboard'),
+                    row('Inspector: could not read text/html', { level: 'warn' })
+                ],
+                dropped: 0
+            });
+
+            const [first, second] = rows(doc);
+            expect(first.querySelector('.capture-log-time').textContent).toBe('14:32:10.514');
+            expect(first.querySelector('.capture-log-level').textContent).toBe('log');
+            expect(first.querySelector('.capture-log-text').textContent).toBe('Inspector: reading the clipboard');
+            expect(second.className).toContain('is-warn');
+            expect(second.getAttribute('data-level')).toBe('warn');
+        });
+
+        it('flattens a group to an indented row', () => {
+            const doc = withLog({
+                entries: [row('Processing HTML', { level: 'group' }), row('inside', { depth: 1 })],
+                dropped: 0
+            });
+
+            const [group, inner] = rows(doc);
+            expect(group.className).toContain('is-group');
+            expect(inner.getAttribute('data-depth')).toBe('1');
+            expect(inner.querySelector('.capture-log-text').textContent).toBe('  inside');
+        });
+
+        it('keeps a message that opens on a blank line', () => {
+            const doc = withLog({ entries: [row('\nsecond line')], dropped: 0 });
+            expect(rows(doc)[0].querySelector('.capture-log-text').textContent).toBe('\nsecond line');
+        });
+
+        it('says how many rows fell off the front', () => {
+            const doc = withLog({ entries: [row('kept')], dropped: 12 });
+            expect(doc.querySelector('.capture-console-dropped').textContent)
+                .toBe('12 earlier messages dropped: the buffer keeps the last 1.');
+        });
+
+        it('escapes a logged message rather than letting it become markup', () => {
+            const doc = withLog({ entries: [row('<img src=x onerror=alert(1)>')], dropped: 0 });
+            expect(doc.querySelectorAll('img')).toHaveLength(0);
+            expect(rows(doc)[0].querySelector('.capture-log-text').textContent)
+                .toBe('<img src=x onerror=alert(1)>');
+        });
+
+        it('carries the log in the JSON block, beside the payloads', () => {
+            const doc = withLog({ entries: [row('Inspector: reading')], dropped: 3 });
+            expect(island(doc).console).toEqual({
+                entries: [row('Inspector: reading')],
+                dropped: 3
+            });
+        });
+
+        it('writes an empty log into the JSON rather than leaving the key out', () => {
+            expect(island(parse(build())).console).toEqual({ entries: [], dropped: 0 });
+        });
+
+        it('leaves the rest of the JSON as the caller wrote it', () => {
+            const doc = parse(build({ data: { captureVersion: 1, suggestedSlug: '2026-09-04-x' } }));
+            expect(island(doc).suggestedSlug).toBe('2026-09-04-x');
+        });
+    });
+});
+
+/* --------------------------------------------------------------- the clock */
+
+describe('clockOf', () => {
+    it('takes the time out of an ISO stamp', () => {
+        expect(Capture.clockOf('2026-09-04T14:32:10.514Z')).toBe('14:32:10.514');
+    });
+
+    it('passes anything else through as it stands', () => {
+        expect(Capture.clockOf('')).toBe('');
+        expect(Capture.clockOf(undefined)).toBe('');
+        expect(Capture.clockOf('just now')).toBe('just now');
+    });
 });

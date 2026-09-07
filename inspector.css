@@ -445,6 +445,18 @@ body {
   white-space: nowrap;
 }
 
+/* The console log, which has no box. It sits in the list because a tester
+   reading the list should not have to wonder whether it is in the file, and it
+   carries its count for the same reason the estimate carries bytes. */
+.capture-always {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
 /* Nothing to capture. Switched off in plain sight with the reason beside it,
    the way the gutter switches off an action that would do nothing. */
 .capture-row.is-off {

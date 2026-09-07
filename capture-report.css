@@ -188,6 +188,112 @@
   background: var(--source-bg);
 }
 
+/* ---------------------------------------------------------------- console */
+
+/* What the inspector page logged. In every capture, so the section is here
+   even when it holds one line saying nothing was logged. */
+
+.capture-console-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  margin: 34px 0 0;
+}
+
+.capture-console-hint {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-tertiary);
+  margin: 3px 0 0;
+  max-width: 78ch;
+}
+
+.capture-console-dropped,
+.capture-console-empty {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin: 12px 0 0;
+}
+
+.capture-log {
+  margin-top: 16px;
+  border: 1px solid var(--border-neutral);
+  border-radius: 14px;
+  background: var(--source-bg);
+  overflow: hidden;
+}
+
+/* A time, a level, then the text. The first two are fixed columns so the text
+   of every row starts at the same place and the log reads down its left edge. */
+.capture-log-row {
+  display: grid;
+  grid-template-columns: max-content 52px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 18px;
+  border-bottom: 1px solid var(--border-hairline);
+  font-size: 12px;
+}
+
+.capture-log-row:last-child {
+  border-bottom: none;
+}
+
+.capture-log-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.capture-log-level {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* Wrapped, unlike a payload block. A console line has no line structure worth
+   preserving against a reader who has to scroll sideways to finish it. */
+.capture-log-text {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-pre);
+}
+
+.capture-log-row.is-warn {
+  background: #fdf6e3;
+}
+
+.capture-log-row.is-warn .capture-log-level,
+.capture-log-row.is-warn .capture-log-text {
+  color: #7a5c17;
+}
+
+.capture-log-row.is-error {
+  background: #fbeee9;
+}
+
+.capture-log-row.is-error .capture-log-level,
+.capture-log-row.is-error .capture-log-text {
+  color: var(--accent-html);
+}
+
+/* A group heading, and the rows under it indented in their own text. */
+.capture-log-row.is-group .capture-log-text {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.capture-log-row.is-debug .capture-log-text,
+.capture-log-row.is-trace .capture-log-text {
+  color: var(--text-tertiary);
+}
+
 /* ------------------------------------------------------------------- foot */
 
 .capture-foot-note {

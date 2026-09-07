@@ -190,6 +190,8 @@ Read the JSON block, not the visible one, when a byte matters: an HTML parser fo
 
 The file makes no network call when opened. It declares `script-src 'none'` and `img-src data:`, and a remote image in a payload has its URL moved aside so it stays readable without fetching — a capture is built to be shared, and a shared file should not tell the origin server who opened it.
 
+It also carries the console. Everything the inspector page logged is recorded from the moment it loads — console calls, uncaught errors, unhandled rejections — and every capture writes the rows out and repeats them in the JSON block. There is no box for it: the row that explains a bad copy is the one nobody thinks to tick. A group becomes an indented row, a DOM node comes out as its start tag rather than a second copy of the payload, and the buffer keeps the last 500 rows and counts what it dropped. The service worker and the content script log into consoles a page cannot read, so those are not in the file.
+
 The split button saves everything by default. The caret opens a list for the times one pane is in the way; it is rebuilt on each open and remembers nothing.
 
 Not included: image entries from the clipboard. Their previews hang off object URLs that die with the tab.
