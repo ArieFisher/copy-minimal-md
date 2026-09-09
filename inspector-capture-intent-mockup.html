@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Capture intent — mockup</title>
+  <link rel="stylesheet" href="inspector.css">
+  <link rel="stylesheet" href="capture-report.css">
+  <style>
+    /* ===================================================================
+       PROPOSED — the capture control, and the panel above its checkboxes.
+       Everything in this block is what would move into inspector.css, in
+       place of the .capture-split rules it replaces. Built on the
+       .segmented pill next door: same fill, same border, same lit chip.
+       =================================================================== */
+
+    .capture {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    /* Three marks, and the whole control. Each one says why the capture is
+       being taken and opens the panel to write the rest. There is no fourth
+       door: a capture that reaches the panel has a mark on it. */
+    .intent-group {
+      display: flex;
+      gap: 2px;
+      padding: 3px;
+      background: var(--control-fill);
+      border: 1px solid var(--border-control);
+      border-radius: 99px;
+    }
+
+    .intent-btn {
+      padding: 5px 12px;
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 99px;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: opacity 0.14s ease;
+    }
+
+    .intent-btn:hover {
+      opacity: 0.9;
+    }
+
+    /* Lit: the chip .segment.is-selected already draws. The border is what
+       tells the three apart, and every colour in it is one the sheet had
+       before this control existed. */
+    .intent-btn[aria-checked="true"] {
+      opacity: 1;
+      background: var(--card-bg);
+      box-shadow: 0 1px 3px rgba(60, 50, 20, 0.15);
+    }
+
+    .intent-btn[data-intent="positive"][aria-checked="true"] {
+      border-color: var(--success-border);
+    }
+
+    .intent-btn[data-intent="question"][aria-checked="true"] {
+      border-color: var(--border-control);
+    }
+
+    .intent-btn[data-intent="negative"][aria-checked="true"] {
+      border-color: var(--accent-html);
+    }
+
+    .intent-btn:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+
+    /* What happened, where the old button's own label used to say it. Out of
+       the flow, so an empty one leaves no gap in the bar and a filled one
+       moves nothing. It sits where the panel sits, and the panel has closed
+       by the time it is written. */
+    .capture-status {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--success-text);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .capture-status.is-failed {
+      color: var(--accent-html);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .intent-btn {
+        transition: none;
+      }
+    }
+
+    /* capture-report.css is linked so the notes block below is the real one.
+       It also dresses the page as a saved capture, which this is not. */
+    body {
+      background: var(--page-bg);
+    }
+
+    /* ------------------------------------------------------- the mockup */
+
+    .sheet {
+      max-width: 940px;
+      margin: 0 auto;
+      padding: 28px 32px 60px;
+    }
+
+    .sheet h2 {
+      font-family: var(--font-serif);
+      font-size: 15px;
+      margin: 34px 0 6px;
+    }
+
+    .sheet p {
+      max-width: 62ch;
+      margin: 0 0 14px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .stage {
+      position: relative;
+      padding: 16px 0 0;
+    }
+
+    /* The panel is absolute against .capture, which is fine on the real page
+       and clips here. Held open and in flow so both states read at once. */
+    .stage .capture-menu {
+      position: static;
+      margin-top: 10px;
+    }
+
+    .swatch {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      padding: 14px 0 0;
+    }
+  </style>
+</head>
+
+<body>
+  <header class="app-bar">
+    <div class="app-bar-title">
+      <h1>Clipboard Inspector</h1>
+      <span id="version-label">v0.14.0</span>
+    </div>
+
+    <div class="app-bar-actions">
+      <div class="zoom">
+        <button type="button" class="zoom-trigger" aria-haspopup="listbox" aria-expanded="false"
+          aria-label="Preview zoom">
+          <span class="zoom-value">75%</span>
+          <svg class="zoom-caret" viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor"
+            stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2.5 4.5 6 8l3.5-3.5" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="app-bar-divider" aria-hidden="true"></div>
+
+      <div class="segmented" role="group" aria-label="Preview mode">
+        <button type="button" class="segment is-selected">Rendered</button>
+        <button type="button" class="segment">Source</button>
+      </div>
+
+      <div class="app-bar-divider" aria-hidden="true"></div>
+
+      <div class="capture">
+        <div class="intent-group" role="radiogroup" aria-label="Why this capture">
+          <button type="button" class="intent-btn" data-intent="positive" role="radio" aria-checked="false"
+            title="Works as intended" aria-label="Works as intended">👍</button>
+          <button type="button" class="intent-btn" data-intent="question" role="radio" aria-checked="false"
+            title="A question" aria-label="A question">🤔</button>
+          <button type="button" class="intent-btn" data-intent="negative" role="radio" aria-checked="true"
+            title="Something is wrong" aria-label="Something is wrong">👎</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="sheet">
+    <h2>The control</h2>
+    <p>Three marks replace the Capture button and its caret. Each one says why the capture is being
+      taken and opens the panel. Above, 👎 is lit. Clicking 🤔 would change the mark and leave the
+      panel and anything typed in it alone; clicking 👎 again closes the panel, as Escape and a click
+      outside do.</p>
+    <p>Every capture now carries a mark, because there is no other way in. Saving costs a second
+      click, and buys a field nobody has to read prose to recover.</p>
+
+    <h2>Unlit, and each one lit</h2>
+    <div class="swatch">
+      <div class="intent-group" role="radiogroup" aria-label="Nothing picked">
+        <button type="button" class="intent-btn" data-intent="positive" role="radio" aria-checked="false">👍</button>
+        <button type="button" class="intent-btn" data-intent="question" role="radio" aria-checked="false">🤔</button>
+        <button type="button" class="intent-btn" data-intent="negative" role="radio" aria-checked="false">👎</button>
+      </div>
+
+      <div class="intent-group" role="radiogroup" aria-label="Works as intended">
+        <button type="button" class="intent-btn" data-intent="positive" role="radio" aria-checked="true">👍</button>
+        <button type="button" class="intent-btn" data-intent="question" role="radio" aria-checked="false">🤔</button>
+        <button type="button" class="intent-btn" data-intent="negative" role="radio" aria-checked="false">👎</button>
+      </div>
+
+      <div class="intent-group" role="radiogroup" aria-label="A question">
+        <button type="button" class="intent-btn" data-intent="positive" role="radio" aria-checked="false">👍</button>
+        <button type="button" class="intent-btn" data-intent="question" role="radio" aria-checked="true">🤔</button>
+        <button type="button" class="intent-btn" data-intent="negative" role="radio" aria-checked="false">👎</button>
+      </div>
+
+      <div class="intent-group" role="radiogroup" aria-label="Something is wrong">
+        <button type="button" class="intent-btn" data-intent="positive" role="radio" aria-checked="false">👍</button>
+        <button type="button" class="intent-btn" data-intent="question" role="radio" aria-checked="false">🤔</button>
+        <button type="button" class="intent-btn" data-intent="negative" role="radio" aria-checked="true">👎</button>
+      </div>
+    </div>
+    <p>Unlit sits at 0.55 opacity. Lit takes the raised chip the view toggle already draws, and a
+      border that tells the three apart — the success green for 👍, the control border for 🤔, the
+      rust the inspector already spends on text/html for 👎. No new colour enters the sheet.</p>
+    <p>A green-amber-red bar was the other candidate. It reads as a satisfaction scale, and 🤔 is not
+      a lukewarm verdict — it marks a question, which is a different axis. Amber would tell the
+      reader "somewhat unhappy". Three chips carry three meanings; a graded bar carries one.</p>
+
+    <h2>The panel, with the note first</h2>
+    <p>The note is what the tester came to write, so the panel asks for it before it asks which panes
+      to keep. One box replaces Expected, Observed and Cause, and its placeholder changes with the
+      mark — the one below is what 👎 gets.</p>
+
+    <div class="stage">
+      <div class="capture">
+        <div class="capture-menu">
+          <label class="capture-field">
+            <span class="capture-field-name">Notes</span>
+            <textarea class="capture-field-input" rows="4"
+              placeholder="Expected / observed / cause, as much as you have."></textarea>
+          </label>
+
+          <div class="capture-group">Rendered</div>
+          <label class="capture-row"><input type="checkbox" checked><span
+              class="capture-name-mime">text/plain</span></label>
+          <label class="capture-row"><input type="checkbox" checked><span
+              class="capture-name-mime is-html">text/html</span></label>
+          <label class="capture-row"><input type="checkbox" checked><span
+              class="capture-name-derived">Markdown</span></label>
+          <label class="capture-row"><input type="checkbox" checked><span class="capture-name-derived">Simple
+              HTML</span></label>
+
+          <div class="capture-group">Source</div>
+          <label class="capture-row"><input type="checkbox" checked><span
+              class="capture-name-mime">text/plain</span></label>
+          <label class="capture-row"><input type="checkbox" checked><span
+              class="capture-name-mime is-html">text/html</span></label>
+          <label class="capture-row"><input type="checkbox" checked><span
+              class="capture-name-derived">Markdown</span></label>
+          <label class="capture-row"><input type="checkbox" checked><span class="capture-name-derived">Simple
+              HTML</span></label>
+
+          <div class="capture-group">Also</div>
+          <label class="capture-row"><input type="checkbox" checked><span>Verbatim payloads</span></label>
+          <label class="capture-row"><input type="checkbox" checked><span>Source URL</span><span
+              class="capture-why">news.google.com</span></label>
+          <div class="capture-always"><span>Console</span><span class="capture-why">7 messages, always
+              saved</span></div>
+
+          <div class="capture-foot">
+            <span class="capture-size">≈ 84.2 KB</span>
+            <button type="button" class="capture-save">
+              <svg class="capture-glyph" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor"
+                stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M8 2v8" />
+                <path d="M4.5 7 8 10.5 11.5 7" />
+                <path d="M2.5 13h11" />
+              </svg>
+              Save .html
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>What the saved file gains</h2>
+    <p>The notes block opens with the mark, so a collaborator opening the file in a browser places it
+      before reading it. Underneath, the JSON block carries the word rather than the emoji, which is
+      what an agent sorting a backlog reads.</p>
+
+    <section class="capture-notes" style="max-width: 640px;">
+      <h2 class="capture-notes-title">Notes</h2>
+      <p class="capture-notes-hint">What the tester marked this capture as, and what they wrote. A
+        blank rule is one nobody filled in.</p>
+      <dl>
+        <dt>Intent</dt>
+        <dd class="is-filled is-intent">👎 Something is wrong</dd>
+        <dt>Notes</dt>
+        <dd class="is-filled">The table came out as one long line. Expected two rows; the wrapper div looks like it swallowed the break.</dd>
+      </dl>
+    </section>
+
+    <h2>An empty clipboard still saves</h2>
+    <p>Save stays live even when no pane is available. The console rides in whatever else is ticked,
+      and a run that produced nothing is often the one worth reading. The old refusal — the button
+      flashing "Nothing yet" — goes with the button.</p>
+  </div>
+</body>
+
+</html>
