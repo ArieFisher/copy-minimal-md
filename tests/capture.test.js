@@ -39,7 +39,7 @@ function build(overrides = {}) {
         },
         sections: [],
         payloads: [],
-        data: { captureVersion: 1 },
+        data: { captureVersion: 2 },
         inspectorCss: '.card { color: red }',
         reportCss: '.capture-page { margin: 0 }',
         ...overrides
@@ -349,8 +349,8 @@ describe('buildDocument', () => {
         const values = (html) =>
             [...parse(html).querySelectorAll('.capture-notes dd')].map((dd) => dd.textContent);
 
-        it('asks for three fields, in the order a tester fills them', () => {
-            expect(terms(build())).toEqual(['Expected', 'Observed', 'Cause']);
+        it('asks the mark first and the note after it', () => {
+            expect(terms(build())).toEqual(['Intent', 'Notes']);
         });
 
         it('leaves out what the header already records', () => {
@@ -359,19 +359,18 @@ describe('buildDocument', () => {
         });
 
         it('writes what was typed', () => {
-            const html = build({ notes: { expected: 'a table', observed: 'one long line' } });
-            expect(values(html)).toEqual(['a table', 'one long line', '']);
+            expect(values(build({ notes: { note: 'one long line' } })))
+                .toEqual(['', 'one long line']);
         });
 
         it('marks a filled field so it reads as prose and not as a blank rule', () => {
-            const doc = parse(build({ notes: { observed: 'one long line' } }));
-            const [expected, observed] = doc.querySelectorAll('.capture-notes dd');
-            expect(expected.className).toBe('');
-            expect(observed.className).toBe('is-filled');
+            const doc = parse(build({ notes: { note: 'one long line' } }));
+            const [, note] = doc.querySelectorAll('.capture-notes dd');
+            expect(note.className).toBe('is-filled');
         });
 
         it('keeps the blank rule for a field left empty or blank', () => {
-            const doc = parse(build({ notes: { expected: '   ', observed: '' } }));
+            const doc = parse(build({ notes: { note: '   ' } }));
             for (const dd of doc.querySelectorAll('.capture-notes dd')) {
                 expect(dd.textContent).toBe('');
                 expect(dd.className).toBe('');
@@ -379,10 +378,40 @@ describe('buildDocument', () => {
         });
 
         it('escapes a note rather than letting it become markup', () => {
-            const doc = parse(build({ notes: { cause: '<img src=x onerror=alert(1)>' } }));
-            const dd = doc.querySelectorAll('.capture-notes dd')[2];
+            const doc = parse(build({ notes: { note: '<img src=x onerror=alert(1)>' } }));
+            const dd = doc.querySelectorAll('.capture-notes dd')[1];
             expect(dd.querySelector('img')).toBe(null);
             expect(dd.textContent).toBe('<img src=x onerror=alert(1)>');
+        });
+    });
+
+    describe('the mark', () => {
+        const intentDd = (html) => parse(html).querySelectorAll('.capture-notes dd')[0];
+
+        it('writes the emoji and the words a reader places it by', () => {
+            expect(intentDd(build({ intent: 'negative' })).textContent)
+                .toBe('\u{1F44E} Something is wrong');
+            expect(intentDd(build({ intent: 'positive' })).textContent)
+                .toBe('\u{1F44D} Works as intended');
+            expect(intentDd(build({ intent: 'question' })).textContent)
+                .toBe('\u{1F914} A question');
+        });
+
+        it('reads as a label rather than as prose', () => {
+            expect(intentDd(build({ intent: 'question' })).className)
+                .toBe('is-filled is-intent');
+        });
+
+        it('leaves a blank rule when nothing was marked', () => {
+            const dd = intentDd(build());
+            expect(dd.textContent).toBe('');
+            expect(dd.className).toBe('');
+        });
+
+        it('ignores a word it does not know rather than writing it out', () => {
+            const dd = intentDd(build({ intent: 'constructor' }));
+            expect(dd.textContent).toBe('');
+            expect(dd.className).toBe('');
         });
     });
 

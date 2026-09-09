@@ -21,6 +21,10 @@ const { test, expect, inspectClipboard } = require('./fixtures.js');
 const HOTKEY_PLAIN = '| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bob | 25 |';
 const HOTKEY_HTML = '<table><tbody><tr><th>Name</th><th>Age</th></tr><tr><td>Alice</td><td>30</td></tr><tr><td>Bob</td><td>25</td></tr></tbody></table>';
 
+/** An image alone. No card has anything to say about it, so a capture of this
+    clipboard carries no pane and no payload — and still carries the console. */
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
 /** A raw page copy: nothing derived yet, so all four cards have something. */
 const RAW_PLAIN = 'Heading\nsome text';
 const RAW_HTML = '<h1 style="color:red">Heading</h1><p>some <b>text</b></p>';
@@ -39,11 +43,23 @@ async function keep(download) {
     return file;
 }
 
-/** Press the left half and read the file it writes. */
-async function capture(page) {
+/** The three marks, in the order the bar lays them out. */
+const MARK = {
+    positive: '#intent .intent-btn[data-intent="positive"]',
+    question: '#intent .intent-btn[data-intent="question"]',
+    negative: '#intent .intent-btn[data-intent="negative"]'
+};
+
+/** Mark the capture, which opens the panel. */
+const mark = (page, which = 'negative') => page.locator(MARK[which]).click();
+
+/** Mark it, save it, and read the file that lands. A panel already open is
+    saved as it stands, mark and all. */
+async function capture(page, which = 'negative') {
+    if (await page.locator('#capture-menu').isHidden()) await mark(page, which);
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        page.locator('#capture-btn').click()
+        page.locator('#capture-menu .capture-save').click()
     ]);
     const file = await keep(download);
     return { download, path: file, html: fs.readFileSync(file, 'utf8') };
@@ -51,34 +67,43 @@ async function capture(page) {
 
 /* ------------------------------------------------------------ the control */
 
-test('sits in the app bar and opens its panel from the caret', async ({ context, server, extensionId }) => {
+test('sits in the app bar and opens its panel from a mark', async ({ context, server, extensionId }) => {
     const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
 
-    await expect(page.locator('#capture-btn')).toBeVisible();
+    await expect(page.locator('#intent')).toBeVisible();
     await expect(page.locator('#capture-menu')).toBeHidden();
 
-    await page.locator('#capture-caret').click();
+    await mark(page);
     await expect(page.locator('#capture-menu')).toBeVisible();
-    await expect(page.locator('#capture-caret')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator(MARK.negative)).toHaveAttribute('aria-checked', 'true');
 
-    // Eight boxes for the four cards in two views, and every one of them ticked.
+    // Ten boxes: four cards in each of two views, then verbatim and the URL.
     const boxes = page.locator('#capture-menu .capture-row input');
     await expect(boxes).toHaveCount(10);
     expect(await page.locator('#capture-menu .capture-row input:checked').count()).toBe(10);
 });
 
-test('closes the panel on an outside click and on Escape', async ({ context, server, extensionId }) => {
+test('closes the panel on the lit mark, an outside click and Escape', async ({ context, server, extensionId }) => {
     const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
 
-    await page.locator('#capture-caret').click();
+    await mark(page);
     await expect(page.locator('#capture-menu')).toBeVisible();
     await page.locator('.app-bar-title h1').click();
     await expect(page.locator('#capture-menu')).toBeHidden();
 
-    await page.locator('#capture-caret').click();
+    await mark(page);
     await expect(page.locator('#capture-menu')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('#capture-menu')).toBeHidden();
+
+    // The lit mark is the door back out, the way the caret it replaced was.
+    await mark(page);
+    await expect(page.locator('#capture-menu')).toBeVisible();
+    await mark(page);
+    await expect(page.locator('#capture-menu')).toBeHidden();
+
+    // Closing does not take the mark off.
+    await expect(page.locator(MARK.negative)).toHaveAttribute('aria-checked', 'true');
 });
 
 test('switches off what this copy has nothing to say about', async ({ context, server, extensionId }) => {
@@ -86,7 +111,7 @@ test('switches off what this copy has nothing to say about', async ({ context, s
     // derived cards are inert and there is nothing to capture from them.
     const page = await inspectClipboard({ context, server, extensionId }, { plain: HOTKEY_PLAIN, html: HOTKEY_HTML });
 
-    await page.locator('#capture-caret').click();
+    await mark(page);
     const off = page.locator('#capture-menu .capture-row.is-off');
     await expect(off).toHaveCount(4);
     await expect(off.first()).toContainText('already in text/plain');
@@ -108,7 +133,7 @@ test('writes a file from a page with no downloads permission', async ({ context,
 
     // The tab closes itself when it is hidden. A download does not hide it.
     await expect(page.locator('.app-bar')).toBeVisible();
-    await expect(page.locator('#capture-label')).toHaveText('Saved');
+    await expect(page.locator('#capture-status')).toHaveText('Saved');
 });
 
 test('names the page the copy came from', async ({ context, server, extensionId }) => {
@@ -151,7 +176,7 @@ test('gives a fixture importer the payloads the pipeline takes', async ({ contex
     await reader.goto(`file://${path}`);
     const data = JSON.parse(await reader.locator('#capture-payloads').textContent());
 
-    expect(data.captureVersion).toBe(1);
+    expect(data.captureVersion).toBe(2);
     expect(data.payloads.html).toContain('<h1');
     expect(data.equivalents.markdown).toContain('# Heading');
     expect(data.present).toEqual({ plain: true, html: true });
@@ -241,7 +266,7 @@ test('carries no script, and says so at the top', async ({ context, server, exte
 test('saves only what is left ticked', async ({ context, server, extensionId }) => {
     const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
 
-    await page.locator('#capture-caret').click();
+    await mark(page);
 
     // Rows run in the order the panel lays them out: four Rendered, four
     // Source, then the extras. Untick the Source group.
@@ -261,28 +286,33 @@ test('saves only what is left ticked', async ({ context, server, extensionId }) 
 test('keeps no tick between one save and the next', async ({ context, server, extensionId }) => {
     const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
 
-    await page.locator('#capture-caret').click();
+    await mark(page);
     await page.locator('#capture-menu .capture-row input').first().uncheck();
     await page.keyboard.press('Escape');
 
     // Reopening gives a panel built from the copy, not from the last visit.
-    await page.locator('#capture-caret').click();
+    await mark(page);
     expect(await page.locator('#capture-menu .capture-row input:checked').count()).toBe(10);
 });
 
 /* ------------------------------------------------------------------ notes */
 
-test('takes the three notes in the panel and writes them into the file', async ({ context, server, extensionId }) => {
+test('takes one note above the boxes and writes it into the file', async ({ context, server, extensionId }) => {
     const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
 
-    await page.locator('#capture-caret').click();
+    await mark(page);
 
     const fields = page.locator('#capture-menu .capture-field');
-    await expect(fields.locator('.capture-field-name')).toHaveText(['Expected', 'Observed', 'Cause']);
+    await expect(fields).toHaveCount(1);
+    await expect(fields.locator('.capture-field-name')).toHaveText(['Notes']);
 
-    await fields.nth(0).locator('textarea').fill('a table with two rows');
-    await fields.nth(1).locator('textarea').fill('one long line');
-    await fields.nth(2).locator('textarea').fill('the wrapper div is dropped');
+    // Above the boxes: what the tester came to write comes before what they
+    // came to keep.
+    const note = await fields.first().boundingBox();
+    const firstBox = await page.locator('#capture-menu .capture-row').first().boundingBox();
+    expect(note.y).toBeLessThan(firstBox.y);
+
+    await fields.first().locator('textarea').fill('one long line, expected two rows');
 
     const [download] = await Promise.all([
         page.waitForEvent('download'),
@@ -294,32 +324,131 @@ test('takes the three notes in the panel and writes them into the file', async (
     const reader = await context.newPage();
     await reader.goto(`file://${file}`);
 
-    await expect(reader.locator('.capture-notes dt')).toHaveText(['Expected', 'Observed', 'Cause']);
+    await expect(reader.locator('.capture-notes dt')).toHaveText(['Intent', 'Notes']);
     await expect(reader.locator('.capture-notes dd')).toHaveText([
-        'a table with two rows', 'one long line', 'the wrapper div is dropped'
+        '\u{1F44E} Something is wrong', 'one long line, expected two rows'
     ]);
 
     const data = JSON.parse(await reader.locator('#capture-payloads').textContent());
-    expect(data.notes).toEqual({
-        expected: 'a table with two rows',
-        observed: 'one long line',
-        cause: 'the wrapper div is dropped'
-    });
+    expect(data.notes).toEqual({ note: 'one long line, expected two rows' });
+    expect(data.intent).toBe('negative');
+    expect(data.captureVersion).toBe(2);
 });
 
-test('keeps the notes across a close, and the left half writes them too', async ({ context, server, extensionId }) => {
+test('keeps the note and the mark across a close', async ({ context, server, extensionId }) => {
     const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
 
-    await page.locator('#capture-caret').click();
-    await page.locator('#capture-menu .capture-field textarea').first().fill('a table with two rows');
+    await mark(page, 'question');
+    await page.locator('#capture-menu .capture-field textarea').fill('a table with two rows');
     await page.keyboard.press('Escape');
 
-    await page.locator('#capture-caret').click();
-    await expect(page.locator('#capture-menu .capture-field textarea').first())
+    await expect(page.locator(MARK.question)).toHaveAttribute('aria-checked', 'true');
+
+    await mark(page, 'question');
+    await expect(page.locator('#capture-menu .capture-field textarea'))
         .toHaveValue('a table with two rows');
-    await page.keyboard.press('Escape');
 
     expect((await capture(page)).html).toContain('a table with two rows');
+});
+
+test('saves a clipboard with nothing on it, for the console alone', async ({ context, server, extensionId }) => {
+    // An image is the everyday version of this: nothing the panel can tick,
+    // and a console that may still say why. The old button refused to run here
+    // and flashed "Nothing yet"; a run that produced nothing is a finding.
+    const page = await inspectClipboard({ context, server, extensionId }, { png: PNG_1PX });
+
+    await mark(page, 'question');
+
+    const off = page.locator('#capture-menu .capture-row.is-off');
+    await expect(off).toHaveCount(8);
+
+    const save = page.locator('#capture-menu .capture-save');
+    await expect(save).toBeEnabled();
+
+    await page.locator('#capture-menu .capture-field textarea')
+        .fill('copied a screenshot and the panel went blank');
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        save.click()
+    ]);
+    const file = await keep(download);
+    const html = fs.readFileSync(file, 'utf8');
+
+    expect(html).not.toContain('id="view-rendered"');
+    expect(html).not.toContain('id="view-source"');
+    expect(html).toContain('id="capture-console"');
+
+    const reader = await context.newPage();
+    await reader.goto(`file://${file}`);
+    const data = JSON.parse(await reader.locator('#capture-payloads').textContent());
+    expect(data.intent).toBe('question');
+    expect(data.notes).toEqual({ note: 'copied a screenshot and the panel went blank' });
+    expect(data.console.entries.length).toBeGreaterThan(0);
+});
+
+/* ------------------------------------------------------------------- mark */
+
+test('moves between the marks on the arrow keys', async ({ context, server, extensionId }) => {
+    const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
+
+    // Nothing marked yet, so the group holds one tab stop and it is the first.
+    await page.locator(MARK.positive).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator(MARK.question)).toBeFocused();
+    await expect(page.locator(MARK.question)).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('#capture-menu')).toBeVisible();
+
+    // It wraps, the way a radiogroup does.
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator(MARK.positive)).toHaveAttribute('aria-checked', 'true');
+
+    // One tab stop: the lit mark holds it and the other two are passed over.
+    expect(await page.locator(MARK.positive).getAttribute('tabindex')).toBe('0');
+    expect(await page.locator(MARK.question).getAttribute('tabindex')).toBe('-1');
+    expect(await page.locator(MARK.negative).getAttribute('tabindex')).toBe('-1');
+});
+
+test('writes the mark the tester pressed', async ({ context, server, extensionId }) => {
+    const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
+
+    for (const which of ['positive', 'question', 'negative']) {
+        const { path } = await capture(page, which);
+        const reader = await context.newPage();
+        await reader.goto(`file://${path}`);
+        const data = JSON.parse(await reader.locator('#capture-payloads').textContent());
+        expect(data.intent).toBe(which);
+        await reader.close();
+    }
+});
+
+test('changes the mark without disturbing the panel or the note', async ({ context, server, extensionId }) => {
+    const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
+
+    await mark(page, 'negative');
+    const note = page.locator('#capture-menu .capture-field textarea');
+    await note.fill('half a sentence so far');
+
+    // The prompt follows the mark, because the three want different things.
+    await expect(note).toHaveAttribute('placeholder', /Expected \/ observed \/ cause/);
+
+    await page.locator(MARK.positive).click();
+
+    await expect(page.locator('#capture-menu')).toBeVisible();
+    await expect(note).toHaveValue('half a sentence so far');
+    await expect(note).toHaveAttribute('placeholder', /What worked/);
+    await expect(page.locator(MARK.positive)).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator(MARK.negative)).toHaveAttribute('aria-checked', 'false');
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.locator('#capture-menu .capture-save').click()
+    ]);
+    const reader = await context.newPage();
+    await reader.goto(`file://${await keep(download)}`);
+    const data = JSON.parse(await reader.locator('#capture-payloads').textContent());
+    expect(data.intent).toBe('positive');
 });
 
 /* ---------------------------------------------------------------- console */
@@ -349,7 +478,7 @@ test('carries what the page logged, with no box to tick', async ({ context, serv
 test('says the log is coming and how much of it there is', async ({ context, server, extensionId }) => {
     const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
 
-    await page.locator('#capture-caret').click();
+    await mark(page);
     const always = page.locator('#capture-menu .capture-always');
     await expect(always).toContainText('Console');
     await expect(always).toContainText(/\d+ messages?, always saved/);
@@ -374,7 +503,7 @@ test('says the log is coming and how much of it there is', async ({ context, ser
 test('records a message written after the panel was opened', async ({ context, server, extensionId }) => {
     const page = await inspectClipboard({ context, server, extensionId }, { plain: RAW_PLAIN, html: RAW_HTML });
 
-    await page.locator('#capture-caret').click();
+    await mark(page);
     await page.evaluate(() => console.warn('Inspector: something the tester did next'));
 
     const [download] = await Promise.all([

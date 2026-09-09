@@ -7,13 +7,14 @@
  * card builders, fetches the stylesheets and hands a blob to the browser, and
  * is covered end to end.
  *
- * The control is a split button. The left half saves everything this copy has.
- * The caret opens a panel with every available box ticked, for the times one of
- * them is in the way. The panel is rebuilt on each open and no tick is kept
- * between them: unticking trims one save, and the next panel is full again.
+ * The control is three marks — works, a question, wrong. Each one says why the
+ * capture is being taken and opens a panel with every available box ticked, for
+ * the times one of them is in the way. There is no other door, so every capture
+ * carries a mark. The panel is rebuilt on each open and no tick is kept between
+ * them: unticking trims one save, and the next panel is full again.
  *
- * The notes are the exception. They are the tester's own words, so they last as
- * long as the tab and both halves of the button write them.
+ * The mark and the note are the exceptions. They are the tester’s own account of
+ * what happened, so they last as long as the tab.
  *
  * The console log is the other exception, and a firmer one: it has no box at
  * all. Every save carries what the page logged, because the row that explains a
@@ -51,11 +52,30 @@
      */
     const notes = {};
 
+    /**
+     * What to write, which depends on why the tester came.
+     *
+     * The box replaced three — Expected, Observed, Cause — and the shape those
+     * carried is worth keeping for the case that wanted it. So the bug prompt
+     * still asks for all three, and the other two ask for what they need.
+     */
     const NOTE_HINT = {
-        expected: 'What the copy should have produced.',
-        observed: 'What it produced instead.',
-        cause: 'Where it goes wrong, if you know yet.'
+        positive: 'What worked, and what you were doing.',
+        question: 'What you were doing, and what you want to know.',
+        negative: 'Expected / observed / cause, as much as you have.'
     };
+
+    const hintFor = (mark) =>
+        (Object.hasOwn(NOTE_HINT, mark || '') ? NOTE_HINT[mark] : null) || NOTE_HINT.question;
+
+    /**
+     * Why this capture is being taken, as the tester marked it.
+     *
+     * Set by the control that opens the panel, so an open panel always has one.
+     * It lasts as long as the tab, like the note: a tester taking three
+     * captures of one bug marks it once.
+     */
+    let intent = null;
 
     /** Only what was typed. An untouched field is absent, not empty. */
     function notesFor() {
@@ -105,9 +125,7 @@
         };
     }
 
-    const anythingToCapture = (avail) => Capture.CARD_KEYS.some((key) => avail[key].on);
-
-    /** Every pane this copy has. What the left half of the button saves. */
+    /** Every pane this copy has. What the panel opens with, all ticked. */
     function everything(avail) {
         const pick = {};
         for (const view of VIEWS) {
@@ -279,6 +297,10 @@
             present: { plain: state.plainPresent, html: state.htmlPresent },
             replaced: { plain: state.mdDone, html: state.htmlDone },
             derivedFrom: meta.derivedFrom,
+            // The mark, as a word. Absent rather than 'none' when nothing is
+            // set, the way an untouched note is absent: the file records what
+            // happened, not what did not.
+            ...(intent ? { intent } : {}),
             notes: notesFor(),
             payloads: {},
             equivalents: {}
@@ -318,6 +340,7 @@
                 payloads: payloadsFor(keys),
                 data: dataFor(keys, meta),
                 notes: notesFor(),
+                intent,
                 consoleLog: consoleLog(),
                 inspectorCss: sheets.inspector,
                 reportCss: sheets.report
@@ -406,10 +429,13 @@
     }
 
     /**
-     * One note field, restored from what the tester has already typed.
+     * The note field, restored from what the tester has already typed.
      *
-     * A textarea rather than an input: a cause runs to a sentence or two, and a
+     * A textarea rather than an input: a note runs to a sentence or two, and a
      * single line that scrolls sideways hides what is already written.
+     *
+     * Held on `els` so changing the mark can re-prompt it without rebuilding
+     * the panel and losing what is in it.
      */
     function noteField(field, changed) {
         const wrap = el('label', 'capture-field');
@@ -417,17 +443,24 @@
 
         const input = document.createElement('textarea');
         input.className = 'capture-field-input';
-        input.rows = 3;
+        input.rows = 4;
         input.value = notes[field.key] || '';
-        input.placeholder = NOTE_HINT[field.key] || '';
+        input.placeholder = hintFor(intent);
         input.addEventListener('input', () => {
             notes[field.key] = input.value;
             changed();
         });
         wrap.appendChild(input);
+        els.note = input;
 
         return wrap;
     }
+
+    /** The download glyph the old capture button carried. Save writes a file. */
+    const SAVE_GLYPH = '<svg class="capture-glyph" viewBox="0 0 16 16" width="13" height="13" ' +
+        'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
+        'stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M8 2v8"/><path d="M4.5 7 8 10.5 11.5 7"/><path d="M2.5 13h11"/></svg>';
 
     function cardLabel(key) {
         if (key === 'plain') return el('span', 'capture-name-mime', Capture.CARD_LABEL[key]);
@@ -445,6 +478,13 @@
         const refresh = () => {
             els.size.textContent = `≈ ${formatBytes(estimate(selection, avail))}`;
         };
+
+        // First, because it is what the tester came to write. The panes below
+        // are what they came to keep. No group heading over it: the field
+        // carries its own label and two would say the same word twice.
+        for (const field of Capture.NOTES_FIELDS) {
+            menu.appendChild(noteField(field, refresh));
+        }
 
         for (const view of VIEWS) {
             menu.appendChild(el('div', 'capture-group', view === 'rendered' ? 'Rendered' : 'Source'));
@@ -482,17 +522,14 @@
             : 'nothing logged yet, saved anyway'));
         menu.appendChild(always);
 
-        menu.appendChild(el('div', 'capture-group', 'Notes'));
-        for (const field of Capture.NOTES_FIELDS) {
-            menu.appendChild(noteField(field, refresh));
-        }
-
         const foot = el('div', 'capture-foot');
         els.size = el('span', 'capture-size');
         foot.appendChild(els.size);
 
-        const saveBtn = el('button', 'capture-save', 'Save .html');
+        const saveBtn = el('button', 'capture-save');
         saveBtn.type = 'button';
+        saveBtn.innerHTML = SAVE_GLYPH;
+        saveBtn.appendChild(document.createTextNode('Save .html'));
         saveBtn.addEventListener('click', () => {
             closePanel();
             run(selection);
@@ -506,19 +543,25 @@
     function openPanel() {
         fillPanel();
         els.menu.hidden = false;
-        els.caret.setAttribute('aria-expanded', 'true');
     }
 
     function closePanel() {
         if (els.menu.hidden) return;
         els.menu.hidden = true;
-        els.caret.setAttribute('aria-expanded', 'false');
+        els.note = null;
     }
 
-    /** Say what happened on the button itself, the way the DOM-bypass card does. */
-    function flash(message) {
-        els.label.textContent = message;
-        setTimeout(() => { els.label.textContent = 'Capture'; }, 2200);
+    /**
+     * Say what happened under the control, where the old button’s own label
+     * used to say it. Out of the flow, so writing it moves nothing in the bar.
+     */
+    function flash(message, failed) {
+        els.status.textContent = message;
+        els.status.classList.toggle('is-failed', Boolean(failed));
+        setTimeout(() => {
+            els.status.textContent = '';
+            els.status.classList.remove('is-failed');
+        }, 2200);
     }
 
     async function run(selection) {
@@ -528,33 +571,80 @@
         } catch (err) {
             console.error('Capture: could not write the file:', err);
             showError(`Could not write the capture: ${err.message}`);
-            flash('Failed');
+            flash('Failed', true);
         }
     }
 
     /* -------------------------------------------------------------- wiring */
 
+    /** Light the mark that is set, and give it the group’s one tab stop. */
+    function lightTheMark() {
+        const lit = els.marks.find((mark) => mark.dataset.intent === intent);
+        for (const mark of els.marks) {
+            const on = mark === lit;
+            mark.setAttribute('aria-checked', String(on));
+            mark.tabIndex = on || (!lit && mark === els.marks[0]) ? 0 : -1;
+        }
+    }
+
+    /**
+     * A mark was pressed.
+     *
+     * The first press opens the panel. Pressing the lit one again closes it,
+     * the way the caret it replaced did. Pressing a different one while the
+     * panel is open changes the mark and leaves the panel — and everything
+     * typed into it — where it stands, so a mis-click costs nothing.
+     */
+    function pick(next) {
+        const open = !els.menu.hidden;
+        const again = next === intent;
+
+        intent = next;
+        lightTheMark();
+
+        if (open && again) {
+            closePanel();
+            return;
+        }
+        if (open) {
+            if (els.note) els.note.placeholder = hintFor(intent);
+            return;
+        }
+        openPanel();
+    }
+
+    /** Arrow keys move within the group, as a radiogroup is expected to. */
+    function step(from, delta) {
+        const at = els.marks.indexOf(from);
+        const next = els.marks[(at + delta + els.marks.length) % els.marks.length];
+        next.focus();
+        pick(next.dataset.intent);
+    }
+
+    /* A Map, not an object: `event.key` is a lookup key from outside, and a
+       bare object answers 'constructor' with something truthy. */
+    const STEP = new Map([
+        ['ArrowRight', 1], ['ArrowDown', 1], ['ArrowLeft', -1], ['ArrowUp', -1]
+    ]);
+
     function wire() {
         els.root = document.getElementById('capture');
         if (!els.root) return;
 
-        els.button = document.getElementById('capture-btn');
-        els.caret = document.getElementById('capture-caret');
         els.menu = document.getElementById('capture-menu');
-        els.label = document.getElementById('capture-label');
+        els.status = document.getElementById('capture-status');
+        els.marks = [...document.querySelectorAll('#intent .intent-btn')];
+        lightTheMark();
 
-        els.button.addEventListener('click', () => {
-            const avail = Capture.availability(snapshot());
-            if (!anythingToCapture(avail)) {
-                flash('Nothing yet');
-                return;
-            }
-            run(everything(avail));
-        });
-
-        els.caret.addEventListener('click', () => {
-            els.menu.hidden ? openPanel() : closePanel();
-        });
+        for (const mark of els.marks) {
+            mark.addEventListener('click', () => pick(mark.dataset.intent));
+            mark.addEventListener('keydown', (event) => {
+                const delta = STEP.get(event.key);
+                if (!delta) return;
+                event.preventDefault();
+                step(mark, delta);
+            });
+        }
 
         document.addEventListener('click', (event) => {
             if (!els.menu.hidden && !event.target.closest('#capture')) closePanel();
@@ -563,7 +653,7 @@
         document.addEventListener('keydown', (event) => {
             if (els.menu.hidden || event.key !== 'Escape') return;
             closePanel();
-            els.caret.focus();
+            (els.marks.find((mark) => mark.dataset.intent === intent) || els.marks[0]).focus();
         });
 
         // Both are wanted the moment the button is pressed, and both are slow
