@@ -57,12 +57,12 @@
      *
      * The box replaced three — Expected, Observed, Cause — and the shape those
      * carried is worth keeping for the case that wanted it. So the bug prompt
-     * still asks for all three, and the other two ask for what they need.
+     * names all three, and the other two name what they take.
      */
     const NOTE_HINT = {
-        positive: 'What worked, and what you were doing.',
-        question: 'What you were doing, and what you want to know.',
-        negative: 'Expected / observed / cause, as much as you have.'
+        positive: 'Remarks',
+        question: 'Suggestions / questions / remarks',
+        negative: 'Expected / observed / cause (if known)'
     };
 
     const hintFor = (mark) =>

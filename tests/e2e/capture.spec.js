@@ -437,7 +437,7 @@ test('changes the mark without disturbing the panel or the note', async ({ conte
 
     await expect(page.locator('#capture-menu')).toBeVisible();
     await expect(note).toHaveValue('half a sentence so far');
-    await expect(note).toHaveAttribute('placeholder', /What worked/);
+    await expect(note).toHaveAttribute('placeholder', /^Remarks$/);
     await expect(page.locator(MARK.positive)).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator(MARK.negative)).toHaveAttribute('aria-checked', 'false');
 
