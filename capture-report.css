@@ -116,6 +116,15 @@
   overflow-wrap: anywhere;
 }
 
+/* The mark, first in the block. It is one of three fixed phrases rather than
+   anything the tester typed, so it reads as a label and not as prose: no wrap,
+   and the emoji a shade larger than the words beside it. */
+.capture-notes dd.is-intent {
+  font-weight: 700;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
 /* -------------------------------------------------------------- view rows */
 
 .capture-view-title,

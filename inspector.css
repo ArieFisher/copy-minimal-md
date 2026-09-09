@@ -296,71 +296,94 @@ body {
 
 /* ------------------------------------------------------------ capture */
 
-/* A split control, built on the zoom's box next door: same fill, same border,
-   same caret, same menu shell. The left half writes everything; the caret opens
-   the list. One box with one hairline down it, so it reads as one control with
-   two doors rather than two buttons that happen to touch. */
+/* Three marks, and the whole capture control. Each one says why the capture is
+   being taken and opens the panel to write the rest. There is no other door,
+   so every capture carries a mark.
+
+   Built on the .segmented pill next door: same fill, same border, same lit
+   chip. What the pill does not have is an unlit state that still has to read
+   as a picture, which is what the opacity is for. */
 
 .capture {
   position: relative;
-}
-
-.capture-split {
-  display: flex;
-  align-items: stretch;
-  background: var(--card-bg);
-  border: 1px solid var(--border-control);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.capture-split:hover {
-  border-color: var(--action);
-}
-
-.capture-btn,
-.capture-caret-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
+}
+
+.intent-group {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--control-fill);
+  border: 1px solid var(--border-control);
+  border-radius: 99px;
+}
+
+.intent-btn {
+  padding: 5px 12px;
   background: none;
-  border: none;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
+  border: 1px solid transparent;
+  border-radius: 99px;
+  font-size: 16px;
+  line-height: 1;
   cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.14s ease;
 }
 
-.capture-caret-btn {
-  padding: 7px 9px;
-  border-left: 1px solid var(--border-hairline);
-  color: var(--text-tertiary);
+.intent-btn:hover {
+  opacity: 0.9;
 }
 
-.capture-btn:hover,
-.capture-caret-btn:hover {
-  background: var(--control-fill);
+/* Lit: the chip .segment.is-selected already draws. The border is what tells
+   the three apart, and every colour in it is one the sheet had before this
+   control existed. A green-amber-red bar was the other candidate and reads as
+   a satisfaction scale, which puts the question mark on the wrong axis. */
+.intent-btn[aria-checked="true"] {
+  opacity: 1;
+  background: var(--card-bg);
+  box-shadow: 0 1px 3px rgba(60, 50, 20, 0.15);
 }
 
-.capture-btn:focus-visible,
-.capture-caret-btn:focus-visible {
-  outline: none;
-  background: var(--control-fill);
-  box-shadow: inset 0 0 0 2px rgba(95, 115, 70, 0.35);
+.intent-btn[data-intent="positive"][aria-checked="true"] {
+  border-color: var(--success-border);
+}
+
+.intent-btn[data-intent="question"][aria-checked="true"] {
+  border-color: var(--border-control);
+}
+
+.intent-btn[data-intent="negative"][aria-checked="true"] {
+  border-color: var(--accent-html);
+}
+
+.intent-btn:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+}
+
+/* What happened, where the old button's own label used to say it. Out of the
+   flow, so an empty one leaves no gap in the bar and a filled one moves
+   nothing. It sits where the panel sits, and the panel has closed by the time
+   it is written. */
+.capture-status {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--success-text);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.capture-status.is-failed {
+  color: var(--accent-html);
 }
 
 .capture-glyph {
-  color: var(--text-tertiary);
-}
-
-.capture-caret {
-  transition: transform 0.16s ease;
-}
-
-.capture-caret-btn[aria-expanded="true"] .capture-caret {
-  transform: rotate(180deg);
+  color: currentColor;
+  opacity: 0.75;
 }
 
 /* Wider than the zoom menu, because these rows carry a reason as well as a
@@ -468,9 +491,12 @@ body {
   background: none;
 }
 
-/* The three fields a capture cannot work out for itself. A textarea and not an
-   input: a cause runs to a sentence or two, and a single line that scrolls
-   sideways hides what is already written. */
+/* The one thing a capture cannot work out for itself. A textarea and not an
+   input: a note runs to a sentence or two, and a single line that scrolls
+   sideways hides what is already written.
+
+   It sits at the top of the panel, because it is what the tester came to write
+   and the panes are what they came to keep. */
 .capture-field {
   display: block;
   padding: 3px 8px 6px;
@@ -530,6 +556,9 @@ body {
 }
 
 .capture-save {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   padding: 8px 16px;
   background: var(--action);
   border: none;
@@ -547,7 +576,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .capture-caret {
+  .intent-btn {
     transition: none;
   }
 }

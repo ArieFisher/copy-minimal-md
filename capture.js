@@ -58,7 +58,7 @@
 (function (global) {
     'use strict';
 
-    const CAPTURE_VERSION = 1;
+    const CAPTURE_VERSION = 2;
 
     const CAPTURE_CSP = [
         "script-src 'none'",
@@ -231,8 +231,8 @@
         'machine-readable copy of every payload, and of the console rows above, is in a hidden ' +
         'block with the id capture-payloads, as JSON.';
 
-    const NOTES_HINT = 'The fields a regression fixture’s notes file wants, as they were ' +
-        'typed into the capture panel. A blank rule is one nobody filled in.';
+    const NOTES_HINT = 'Why the tester took this capture, and what they wrote about it, as marked ' +
+        'and typed in the capture panel. A blank rule is one nobody filled in.';
 
     const CONSOLE_HINT = 'What the inspector page logged, in the order it logged it, up to the ' +
         'moment Save was pressed. The service worker and the content script log elsewhere and are ' +
@@ -244,15 +244,35 @@
     const INDENT = '  ';
 
     /**
-     * The three fields a capture cannot work out for itself. Reported and Source
+     * The one thing a capture cannot work out for itself. Reported and Source
      * are not among them: the header above already carries the capture time and
      * the page the copy came from.
+     *
+     * It was three fields — Expected, Observed, Cause — and most captures came
+     * back with two of them blank. One box asks the same question and gets an
+     * answer; the shape the three carried lives on in the placeholder, which
+     * changes with the mark.
+     *
+     * Still an array. `buildDocument` and `notesFor` iterate it, so a second
+     * field costs a line here and nothing anywhere else.
      */
     const NOTES_FIELDS = [
-        { key: 'expected', label: 'Expected' },
-        { key: 'observed', label: 'Observed' },
-        { key: 'cause', label: 'Cause' }
+        { key: 'note', label: 'Notes' }
     ];
+
+    /**
+     * Why the capture was taken, as the tester marked it.
+     *
+     * The key is what the file records and what an agent sorting a backlog
+     * reads. The emoji is for the person who opens the file, and never reaches
+     * the JSON: a word survives a grep, a re-encode and a diff, and an emoji
+     * survives none of them reliably.
+     */
+    const INTENTS = {
+        positive: { emoji: '\u{1F44D}', label: 'Works as intended' },
+        question: { emoji: '\u{1F914}', label: 'A question' },
+        negative: { emoji: '\u{1F44E}', label: 'Something is wrong' }
+    };
 
     /**
      * `15:59:40.893` out of an ISO stamp, which is what a console shows and what
@@ -334,11 +354,12 @@
      *
      * `sections` are `{ id, view, node }`, the node being a ready grid.
      * `payloads` are `{ id, entry, label, kind, size, text }`.
+     * `intent` is a key of INTENTS, or nothing when the capture is unmarked.
      * `consoleLog` is `{ entries, dropped }` off console-log.js. It is written
      * into the page and into the JSON here rather than by the caller, so no
      * caller can leave it out.
      */
-    function buildDocument({ meta, sections, payloads, data, notes, consoleLog, inspectorCss, reportCss }) {
+    function buildDocument({ meta, sections, payloads, data, notes, intent, consoleLog, inspectorCss, reportCss }) {
         const doc = document.implementation.createHTMLDocument(TITLE);
         doc.head.textContent = '';
 
@@ -389,6 +410,18 @@
         notesBox.appendChild(elem(doc, 'h2', 'capture-notes-title', 'Notes'));
         notesBox.appendChild(elem(doc, 'p', 'capture-notes-hint', NOTES_HINT));
         const notesList = elem(doc, 'dl');
+
+        // hasOwn, not a bare lookup: `intent` carries a key from the page, and
+        // a bare INTENTS[intent] answers 'constructor' with something truthy
+        // off the prototype, which lands in the file as "undefined undefined".
+        const mark = Object.hasOwn(INTENTS, intent || '') ? INTENTS[intent] : null;
+
+        // The mark goes first: a reader placing this file wants it before the
+        // prose, and an unmarked capture is a blank rule like any other.
+        notesList.appendChild(elem(doc, 'dt', null, 'Intent'));
+        notesList.appendChild(elem(doc, 'dd', mark ? 'is-filled is-intent' : null,
+            mark ? `${mark.emoji} ${mark.label}` : ''));
+
         for (const field of NOTES_FIELDS) {
             const value = ((notes && notes[field.key]) || '').trim();
             notesList.appendChild(elem(doc, 'dt', null, field.label));
@@ -457,6 +490,7 @@
         CARD_KEYS,
         CARD_LABEL,
         NOTES_FIELDS,
+        INTENTS,
         WHY,
         hostSlug,
         dateSlug,
