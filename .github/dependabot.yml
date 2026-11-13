@@ -1,0 +1,27 @@
+# Opens a pull request when a newer version of a dependency is released, so
+# the lock file moves forward and CI tests each move before it lands.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      dev-dependencies:
+        applies-to: version-updates
+        dependency-type: "development"
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore"
+    pull-request-branch-name:
+      prefix: "chore"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+    pull-request-branch-name:
+      prefix: "chore"
