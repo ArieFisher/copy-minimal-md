@@ -1,6 +1,6 @@
 {
   "name": "copy-minimal-md",
-  "version": "0.14.2",
+  "version": "0.14.3",
   "private": true,
   "description": "Docs Markdown Cleaner Chrome extension — test harness",
   "scripts": {
@@ -12,8 +12,8 @@
     "capture:fixtures": "node tests/scripts/capture-fixtures.js"
   },
   "devDependencies": {
-    "@playwright/test": "^1.48.0",
-    "jsdom": "^25.0.1",
-    "vitest": "^2.1.4"
+    "@playwright/test": "^1.65.0",
+    "jsdom": "^31.0.0",
+    "vitest": "^5.1.0"
   }
 }
