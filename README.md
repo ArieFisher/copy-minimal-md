@@ -90,6 +90,7 @@ By contrast, if you copy with this library, it takes the **selected values** in 
 *   **Jagged tables**: Copies selected values in the correct structure
 *   **ARIA tables**: Many sites no longer use traditional HTML `<table>` tags, but instead construct what looks like tables out of sophisticated HTML.
 *   **TSV tables**: When users copy a table, many websites will only give the clipboard tab-separated values. This library converts those into traditional tables for easier pasting.
+*   **ASCII tables**: A table drawn in characters — MySQL or psql output, box-drawing tables, dash-underlined columns — becomes a real table, whether it arrives as plain text or in a code block, on its own or set off by blank lines among paragraphs. Plain paragraphs around it come along; Markdown around it leaves the copy as it is. Ragged rows, stray or missing borders, wrapped cells and row-count footers are repaired on the way.
 *   **Clipboard Inspector**: Want to see what's actually in your clipboard? Press `Ctrl`/`Cmd + Shift + O` to inspect clipboard contents.
 *   **Capture a test case**: Mark a copy in the inspector — 👍, 🤔 or 👎 — and one button writes what you are looking at to a single HTML file: both views, every payload verbatim, and why you sent it. To send to a collaborator or hand back as a regression fixture.
 *   **Local processing**: No data sent to an external service
@@ -127,7 +128,7 @@ Everywhere else the same two entries are on offer: a plain-text destination (an 
     *   **Repair**: If a native table was selected, the script replaces the browser's "jagged" clipboard HTML with the reconstructed "perfect" table from step 2.
     *   **Synthesis**: If an ARIA grid was detected but the browser provided no HTML payload, the script synthesizes a table directly from the DOM extraction.
 5.  **Markdown Conversion**: Converts the final sanitized HTML to Markdown via [Turndown](https://github.com/mixmark-io/turndown).
-6.  **TSV Fallback**: If no HTML is present but the plain text looks like Tab-Separated Values (TSV), it converts the TSV data directly into a Markdown table.
+6.  **TSV Fallback**: If no HTML is present but the plain text looks like Tab-Separated Values (TSV), it converts the TSV data directly into a Markdown table. Plain text that is a table drawn in characters goes the same way.
 7.  **Clipboard Update**: Writes both equivalents back to the clipboard — the final clean Markdown as `text/plain`, and the same "Simple HTML" the Clipboard Inspector previews as `text/html`. Whichever the destination reaches for, it gets this extension's markup rather than the source page's: paste into an LLM or an editor and the Markdown arrives; paste into Gmail, Docs or Notion and the structure arrives, formatted. Both come from one derivation, so the two entries always describe the same copy. The exception is a copy that arrived as plain text and is not TSV: there is no HTML to simplify, so it is written as text alone — which still clears whatever `text/html` the source page had put there.
 
 ## Dependencies

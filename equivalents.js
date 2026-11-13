@@ -12,6 +12,8 @@
  *   - TurndownService   (lib/turndown.js)
  *   - turndownPluginGfm (lib/turndown-plugin-gfm.js)
  *   - DOMParser         (browser global / jsdom)
+ *   - AsciiTable        (ascii-table.js; optional — without it a table drawn
+ *                        in a <pre> stays a code block)
  *
  * Both equivalents come from the same repaired document, and they diverge on
  * exactly one point: the header row. GFM has no table syntax without one, so
@@ -44,6 +46,9 @@
             modified = true;
             sourceType = 'HTML (Extracted ARIA Table)';
         }
+        // After the ARIA pass, which stands down for any copy that already
+        // holds a <table>.
+        if (tablesFromDrawnText(doc)) modified = true;
 
         return { repaired: modified ? doc.body.innerHTML : htmlText, sourceType };
     }
@@ -292,6 +297,32 @@
 
         ariaRows.forEach(row => row.remove());
         return true;
+    }
+
+    /**
+     * A table drawn in characters inside a <pre> — psql or MySQL output pasted
+     * into a page, a box table in a chat reply's code block — becomes the
+     * table it draws. Left as it is, it reaches the Markdown as a fenced block
+     * of box art and the Simple HTML as the same, and neither pastes as a
+     * table.
+     *
+     * The <pre> is read in blocks split at blank lines, so a table with a
+     * caption or a command above it is found too. The blocks that are not
+     * tables stay preformatted, each in a <pre> of its own.
+     *
+     * AsciiTable (ascii-table.js) does the reading; where it is not loaded,
+     * this does nothing.
+     */
+    function tablesFromDrawnText(doc) {
+        if (typeof AsciiTable === 'undefined') return false;
+        let modified = false;
+        doc.querySelectorAll('pre').forEach(pre => {
+            const blocks = AsciiTable.parseBlocks(pre.textContent);
+            if (!blocks) return;
+            pre.replaceWith(AsciiTable.blocksToNodes(blocks, doc, { textTag: 'pre' }));
+            modified = true;
+        });
+        return modified;
     }
 
     /* ------------------------------------------------------ header handling */

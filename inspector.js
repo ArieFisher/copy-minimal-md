@@ -109,8 +109,8 @@ const simpleHtmlOnClipboard = () =>
  * Run the copy-minimal-md conversion over the clipboard payload.
  *
  * With a text/html entry this is the normal path, handed to Equivalents. Without
- * one we fall back to TSV detection over the plain text, which yields both a
- * Markdown table and a simple HTML table.
+ * one we read the plain text as a table — tab-separated, else drawn in
+ * characters — which yields both a Markdown table and a simple HTML table.
  *
  * Returns null when the copy has no structure worth deriving.
  */
@@ -120,7 +120,8 @@ function deriveEquivalents({ html, plain, hasHtml }) {
     }
 
     if (plain) {
-        const detection = TsvDetector.detect({ hasHtml: false, plainText: plain });
+        const detection = TsvDetector.detect({ hasHtml: false, plainText: plain })
+            || AsciiTable.detect({ hasHtml: false, plainText: plain });
         if (!detection) return null;
         return {
             markdown: detection.markdown,

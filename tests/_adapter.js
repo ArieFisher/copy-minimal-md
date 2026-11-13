@@ -33,6 +33,12 @@ function loadLibs() {
     loadGlobal('lib/turndown.js', 'TurndownService');
     loadGlobal('lib/turndown-plugin-gfm.js', 'turndownPluginGfm');
 
+    // equivalents.js reads tables drawn in a <pre> through AsciiTable, which
+    // asks PlainKind whether the text around a table is Markdown. Both go in
+    // place the way the extension's own script loading puts them.
+    require('../plain-kind.js');
+    require('../ascii-table.js');
+
     libsLoaded = true;
 }
 
