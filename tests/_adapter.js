@@ -33,6 +33,10 @@ function loadLibs() {
     loadGlobal('lib/turndown.js', 'TurndownService');
     loadGlobal('lib/turndown-plugin-gfm.js', 'turndownPluginGfm');
 
+    // equivalents.js reads tables drawn in a <pre> through it, as the
+    // extension's own script loading puts it in place.
+    require('../ascii-table.js');
+
     libsLoaded = true;
 }
 

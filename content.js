@@ -165,15 +165,20 @@ if (!window.__tsvCleanerListenerRegistered) {
                 const plainText = await textBlob.text();
 
                 const detection = TsvDetector.detect({ hasHtml: false, plainText });
+                const drawn = detection ? null : AsciiTable.detect({ hasHtml: false, plainText });
                 if (detection) {
                     console.log("Docs Cleaner: TSV pattern detected; firing listeners.");
                     await TsvDetector.fire(detection);
                     flashSuccess("TSV Table Ready!");
+                } else if (drawn) {
+                    console.log("Docs Cleaner: ASCII table detected.");
+                    await writeCleaned(drawn.markdown, drawn.simpleHtml);
+                    flashSuccess("ASCII Table Ready!");
                 } else {
                     // Scrubs hidden metadata (RTF, vendor tags) by rewriting as clean text.
                     // The one path with no text/html entry: there is no HTML to
                     // simplify and no structure in the text to build one from —
-                    // TSV, the case where there is, was handled just above.
+                    // the tables, the cases where there is, were handled just above.
                     await navigator.clipboard.writeText(plainText);
                     console.log("Docs Cleaner: Plain text written to clipboard.");
                     flashSuccess("Cleaned (Text)!");

@@ -15,6 +15,7 @@ const INJECT_FILES = [
   'lib/turndown-plugin-gfm.js',
   'lib/marked.min.js',
   'tsv-detector.js',
+  'ascii-table.js',
   'grid-detector.js',
   'equivalents.js',
   'pipeline.js',
