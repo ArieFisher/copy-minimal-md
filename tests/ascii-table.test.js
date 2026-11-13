@@ -161,11 +161,11 @@ describe('AsciiTable.parse — repairs', () => {
 
   it('keeps a pipe inside a cell when the rules put no column there', () => {
     expect(parse([
-      '+--------+-----+',
-      '| Cmd    | Ok  |',
-      '+--------+-----+',
+      '+---------+-----+',
+      '| Cmd     | Ok  |',
+      '+---------+-----+',
       '| ls | wc | yes |',
-      '+--------+-----+',
+      '+---------+-----+',
     ]).rows).toEqual([['ls | wc', 'yes']]);
   });
 
