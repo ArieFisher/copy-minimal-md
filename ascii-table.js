@@ -30,15 +30,19 @@
  *   - a full-width line above the column headings is kept as a title, ahead of
  *     the table, rather than squeezed into the first column.
  *
- * The whole entry has to be the table. Prose around it, or a box with a single
- * column in it, is not read as one.
+ * A table can sit among other text. `parseBlocks` splits the text at blank
+ * lines and reads each block on its own, so a table set off by blank lines is
+ * found wherever it is; the blocks around it are kept as text. A box with a
+ * single column in it is not a table.
  *
  * A pipe table with a GFM delimiter row under its first line is Markdown
- * already, and is left for the Markdown reader.
+ * already, and is left for the Markdown reader. So is an entry whose text
+ * around the table reads as Markdown: written out as plain text, its
+ * emphasis, lists and links would come out escaped.
  *
- * Exports `window.AsciiTable = { parse, toNodes, detect }`. `detect` needs
- * `Equivalents` (equivalents.js) at call time; `parse` and `toNodes` need
- * nothing but a document.
+ * Exports `window.AsciiTable = { parse, parseBlocks, toNodes, blocksToNodes,
+ * detect }`. `detect` needs `Equivalents` (equivalents.js) and `PlainKind`
+ * (plain-kind.js) at call time; the rest need nothing but a document.
  */
 (function (global) {
     if (global.AsciiTable) return;
@@ -357,23 +361,90 @@
         return fragment;
     }
 
+    /** A blank line, or one holding only spaces: where one block ends. */
+    const BLOCK_BREAK = /\n[^\S\n]*\n/;
+
     /**
-     * Both equivalents for a text/plain entry that is a drawn table, or null.
+     * The text cut into blocks at blank lines, each either `{ table }` or
+     * `{ lines }` of text. Null when no block is a table.
+     */
+    function parseBlocks(text) {
+        if (!text) return null;
+        const blocks = text
+            .replace(/\r\n?/g, '\n')
+            .split(BLOCK_BREAK)
+            .filter(block => block.trim() !== '')
+            .map(block => {
+                const table = parse(block);
+                return table ? { table } : { lines: block.split('\n').map(line => line.trimEnd()) };
+            });
+        return blocks.some(block => block.table) ? blocks : null;
+    }
+
+    /** Neighbouring text blocks as one, with the blank line between them kept. */
+    function joinTextRuns(blocks) {
+        return blocks.reduce((joined, block) => {
+            const last = joined[joined.length - 1];
+            if (block.lines && last && last.lines) {
+                return [...joined.slice(0, -1), { lines: [...last.lines, '', ...block.lines] }];
+            }
+            return [...joined, block];
+        }, []);
+    }
+
+    /**
+     * The blocks as nodes of `doc`. A table block becomes its table. A text
+     * block becomes a paragraph with its line breaks kept, or, with
+     * `textTag: 'pre'`, preformatted text as it was — one <pre> for each run
+     * of text between tables, so code with blank lines in it stays one block.
+     */
+    function blocksToNodes(blocks, doc, { textTag = 'p' } = {}) {
+        const fragment = doc.createDocumentFragment();
+        (textTag === 'pre' ? joinTextRuns(blocks) : blocks).forEach(block => {
+            if (block.table) {
+                fragment.appendChild(toNodes(block.table, doc));
+                return;
+            }
+            const node = doc.createElement(textTag);
+            if (textTag === 'pre') {
+                node.textContent = block.lines.join('\n');
+            } else {
+                block.lines.forEach((line, i) => {
+                    if (i > 0) node.appendChild(doc.createElement('br'));
+                    node.appendChild(doc.createTextNode(line));
+                });
+            }
+            fragment.appendChild(node);
+        });
+        return fragment;
+    }
+
+    /**
+     * Whether a text block would be read as Markdown. With no PlainKind to
+     * ask, every block counts as Markdown, so text around a table is never
+     * escaped on a guess.
+     */
+    const readsAsMarkdown = block => typeof PlainKind === 'undefined'
+        || PlainKind.of(block.lines.join('\n')) === 'markdown';
+
+    /**
+     * Both equivalents for a text/plain entry holding a drawn table, or null.
      * Same shape as `TsvDetector.detect`, and the same derivation behind it.
      */
     function detect({ hasHtml, plainText }) {
         if (hasHtml) return null;
-        const table = parse(plainText);
-        if (!table) return null;
+        const blocks = parseBlocks(plainText);
+        if (!blocks) return null;
+        if (blocks.some(block => block.lines && readsAsMarkdown(block))) return null;
 
         const doc = new DOMParser().parseFromString('', 'text/html');
-        doc.body.appendChild(toNodes(table, doc));
+        doc.body.appendChild(blocksToNodes(blocks, doc));
         const { markdown, simpleHtml } = Equivalents.fromHtml(doc.body.innerHTML);
 
         return { markdown, simpleHtml, plainText, sourceType: 'Plain Text (ASCII Table)' };
     }
 
-    global.AsciiTable = { parse, toNodes, detect };
+    global.AsciiTable = { parse, parseBlocks, toNodes, blocksToNodes, detect };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) {

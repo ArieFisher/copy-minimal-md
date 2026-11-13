@@ -90,7 +90,7 @@ By contrast, if you copy with this library, it takes the **selected values** in 
 *   **Jagged tables**: Copies selected values in the correct structure
 *   **ARIA tables**: Many sites no longer use traditional HTML `<table>` tags, but instead construct what looks like tables out of sophisticated HTML.
 *   **TSV tables**: When users copy a table, many websites will only give the clipboard tab-separated values. This library converts those into traditional tables for easier pasting.
-*   **ASCII tables**: A table drawn in characters — MySQL or psql output, box-drawing tables, dash-underlined columns — becomes a real table, whether it arrives as plain text or in a code block. Ragged rows, stray or missing borders, wrapped cells and row-count footers are repaired on the way.
+*   **ASCII tables**: A table drawn in characters — MySQL or psql output, box-drawing tables, dash-underlined columns — becomes a real table, whether it arrives as plain text or in a code block, on its own or set off by blank lines among paragraphs. Plain paragraphs around it come along; Markdown around it leaves the copy as it is. Ragged rows, stray or missing borders, wrapped cells and row-count footers are repaired on the way.
 *   **Clipboard Inspector**: Want to see what's actually in your clipboard? Press `Ctrl`/`Cmd + Shift + O` to inspect clipboard contents.
 *   **Capture a test case**: Mark a copy in the inspector — 👍, 🤔 or 👎 — and one button writes what you are looking at to a single HTML file: both views, every payload verbatim, and why you sent it. To send to a collaborator or hand back as a regression fixture.
 *   **Local processing**: No data sent to an external service

@@ -280,7 +280,59 @@ describe('AsciiTable.detect', () => {
   });
 });
 
+describe('a table among other text', () => {
+  const TABLE = '+------+-----+\n| Name | Age |\n+------+-----+\n| Bob  | 25  |\n+------+-----+';
+
+  it('is found between paragraphs set off by blank lines', () => {
+    const blocks = AsciiTable.parseBlocks(`Here are the users:\n\n${TABLE}\n\nThat is all.`);
+    expect(blocks).toEqual([
+      { lines: ['Here are the users:'] },
+      { table: { title: null, header: ['Name', 'Age'], rows: [['Bob', '25']] } },
+      { lines: ['That is all.'] },
+    ]);
+  });
+
+  it('is not found in text with no table in it', () => {
+    expect(AsciiTable.parseBlocks('One paragraph.\n\nAnother | with a pipe.')).toBeNull();
+  });
+
+  it('writes the paragraphs around the table in both entries', () => {
+    const out = AsciiTable.detect({
+      hasHtml: false,
+      plainText: `Here are the users:\n\n${TABLE}\n\nThat is all.`,
+    });
+    expect(out.markdown).toBe('Here are the users:\n\n| Name | Age |\n| --- | --- |\n| Bob | 25 |\n\nThat is all.');
+    expect(out.simpleHtml).toMatch(/^<p>Here are the users:<\/p><table>.*<\/table><p>That is all\.<\/p>$/);
+  });
+
+  it('keeps the line breaks inside a paragraph', () => {
+    const out = AsciiTable.detect({ hasHtml: false, plainText: `Line one\nLine two\n\n${TABLE}` });
+    expect(out.simpleHtml).toContain('<p>Line one<br>Line two</p>');
+    expect(out.markdown).toMatch(/^Line one\s*\nLine two\n\n\| Name/);
+  });
+
+  it('escapes prose that holds a tag', () => {
+    const out = AsciiTable.detect({ hasHtml: false, plainText: `Uses <b> tags\n\n${TABLE}` });
+    expect(out.simpleHtml).toContain('<p>Uses &lt;b&gt; tags</p>');
+  });
+
+  it('leaves an entry alone when the text around the table reads as Markdown', () => {
+    expect(AsciiTable.detect({ hasHtml: false, plainText: `**Users**\n\n${TABLE}` })).toBeNull();
+    expect(AsciiTable.detect({ hasHtml: false, plainText: `- one\n- two\n\n${TABLE}` })).toBeNull();
+  });
+});
+
 describe('a table drawn in a <pre> of an HTML copy', () => {
+  it('is found below a caption in the same block', () => {
+    const { simpleHtml } = fromHtml('<pre>Users\n\n+---+---+\n| a | b |\n+---+---+\n| 1 | 2 |\n+---+---+</pre>');
+    expect(simpleHtml).toMatch(/^<pre>Users<\/pre><table>/);
+  });
+
+  it('keeps the code around it as one preformatted block', () => {
+    const { simpleHtml } = fromHtml('<pre>a = 1\n\nb = 2\n\n| x | y |\n| 1 | 2 |</pre>');
+    expect(simpleHtml).toMatch(/^<pre>a = 1\n\nb = 2<\/pre><table>/);
+  });
+
   it('becomes a table in both equivalents', () => {
     const { markdown, simpleHtml } = fromHtml(
       '<p>Result:</p><pre><code>+------+-----+\n| Name | Age |\n+------+-----+\n| Bob  | 25  |\n+------+-----+</code></pre>'
